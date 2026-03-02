@@ -167,6 +167,23 @@ sympozium serve            # open the web dashboard in your browser
 sympozium uninstall        # clean removal
 ```
 
+### Slack setup (Socket Mode)
+
+For reliable Slack connectivity, configure your Slack app with both tokens and required app settings:
+
+- Provide both secrets in the channel secret:
+  - `SLACK_BOT_TOKEN` (`xoxb-...`)
+  - `SLACK_APP_TOKEN` (`xapp-...`)
+- Enable **App Home → Messages Tab** and allow users to message the app.
+- Enable **Socket Mode**.
+- Add bot event subscriptions:
+  - `message.im`
+  - `message.channels`
+  - `app_mention`
+- Reinstall the app after changing scopes or event subscriptions.
+
+If `SLACK_APP_TOKEN` is omitted, Sympozium falls back to Slack Events API mode, which requires a publicly reachable webhook URL.
+
 ## Architecture
 
 ```mermaid

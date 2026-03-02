@@ -544,7 +544,7 @@ func runOnboard() error {
 	fmt.Println("    5) Skip — I'll add a channel later")
 	channelChoice := prompt(reader, "  Choice [1-5]", "5")
 
-	var channelType, channelTokenKey, channelToken string
+	var channelType, channelTokenKey, channelToken, slackAppToken string
 	switch channelChoice {
 	case "1":
 		channelType = "telegram"
@@ -555,7 +555,9 @@ func runOnboard() error {
 		channelType = "slack"
 		channelTokenKey = "SLACK_BOT_TOKEN"
 		fmt.Println("\n  💡 Create a Slack app at https://api.slack.com/apps")
+		fmt.Println("  💡 Socket Mode requires BOTH SLACK_BOT_TOKEN (xoxb-...) and SLACK_APP_TOKEN (xapp-...)")
 		channelToken = promptSecret(reader, "  Bot OAuth Token")
+		slackAppToken = promptSecret(reader, "  App-Level Token (xapp-..., optional for Events API mode)")
 	case "3":
 		channelType = "discord"
 		channelTokenKey = "DISCORD_BOT_TOKEN"
@@ -649,9 +651,17 @@ func runOnboard() error {
 	if channelType != "" && channelToken != "" {
 		fmt.Printf("  Creating secret %s...\n", channelSecretName)
 		_ = kubectl("delete", "secret", channelSecretName, "-n", namespace, "--ignore-not-found")
-		if err := kubectl("create", "secret", "generic", channelSecretName,
+		args := []string{
+			"create", "secret", "generic", channelSecretName,
 			"-n", namespace,
-			fmt.Sprintf("--from-literal=%s=%s", channelTokenKey, channelToken)); err != nil {
+			fmt.Sprintf("--from-literal=%s=%s", channelTokenKey, channelToken),
+		}
+		if channelType == "slack" && slackAppToken != "" {
+			args = append(args, fmt.Sprintf("--from-literal=SLACK_APP_TOKEN=%s", slackAppToken))
+		} else if channelType == "slack" {
+			fmt.Println("  ⚠  SLACK_APP_TOKEN not provided — Slack will run in Events API fallback mode (requires public URL).")
+		}
+		if err := kubectl(args...); err != nil {
 			return fmt.Errorf("create channel secret: %w", err)
 		}
 	}
