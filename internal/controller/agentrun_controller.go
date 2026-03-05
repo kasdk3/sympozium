@@ -50,9 +50,9 @@ var (
 	controllerErrors, _  = controllerMeter.Int64Counter("sympozium.errors", metric.WithUnit("{error}"), metric.WithDescription("Errors encountered"))
 
 	// Web endpoint server-mode metrics.
-	webEndpointServing, _        = controllerMeter.Int64UpDownCounter("sympozium.web_endpoint.serving", metric.WithUnit("{deployment}"), metric.WithDescription("Active server-mode Deployments"))
+	webEndpointServing, _         = controllerMeter.Int64UpDownCounter("sympozium.web_endpoint.serving", metric.WithUnit("{deployment}"), metric.WithDescription("Active server-mode Deployments"))
 	webEndpointGatewayNotReady, _ = controllerMeter.Int64Counter("sympozium.web_endpoint.gateway_not_ready", metric.WithUnit("{check}"), metric.WithDescription("Gateway check failures"))
-	webEndpointRouteCreated, _   = controllerMeter.Int64Counter("sympozium.web_endpoint.route_created", metric.WithUnit("{route}"), metric.WithDescription("HTTPRoutes created"))
+	webEndpointRouteCreated, _    = controllerMeter.Int64Counter("sympozium.web_endpoint.route_created", metric.WithUnit("{route}"), metric.WithDescription("HTTPRoutes created"))
 )
 
 const agentRunFinalizer = "sympozium.ai/agentrun-finalizer"

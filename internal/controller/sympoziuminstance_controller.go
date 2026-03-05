@@ -490,7 +490,6 @@ func (r *SympoziumInstanceReconciler) ensureWebEndpointAgentRun(ctx context.Cont
 	return nil
 }
 
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *SympoziumInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).

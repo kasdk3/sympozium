@@ -1584,13 +1584,13 @@ type suggestionsMsg struct {
 	items []suggestion
 }
 type dataRefreshMsg struct {
-	instances    *[]sympoziumv1alpha1.SympoziumInstance
-	runs         *[]sympoziumv1alpha1.AgentRun
-	policies     *[]sympoziumv1alpha1.SympoziumPolicy
-	skills       *[]sympoziumv1alpha1.SkillPack
-	channels     *[]channelRow
-	pods         *[]podRow
-	schedules    *[]sympoziumv1alpha1.SympoziumSchedule
+	instances     *[]sympoziumv1alpha1.SympoziumInstance
+	runs          *[]sympoziumv1alpha1.AgentRun
+	policies      *[]sympoziumv1alpha1.SympoziumPolicy
+	skills        *[]sympoziumv1alpha1.SkillPack
+	channels      *[]channelRow
+	pods          *[]podRow
+	schedules     *[]sympoziumv1alpha1.SympoziumSchedule
 	personaPacks  *[]sympoziumv1alpha1.PersonaPack
 	gatewayConfig *sympoziumv1alpha1.SympoziumConfig
 	fetchErr      string
@@ -2109,12 +2109,12 @@ type tuiModel struct {
 	wizard wizardState
 
 	// Cached K8s data
-	instances    []sympoziumv1alpha1.SympoziumInstance
-	runs         []sympoziumv1alpha1.AgentRun
-	policies     []sympoziumv1alpha1.SympoziumPolicy
-	skills       []sympoziumv1alpha1.SkillPack
-	channels     []channelRow
-	pods         []podRow
+	instances     []sympoziumv1alpha1.SympoziumInstance
+	runs          []sympoziumv1alpha1.AgentRun
+	policies      []sympoziumv1alpha1.SympoziumPolicy
+	skills        []sympoziumv1alpha1.SkillPack
+	channels      []channelRow
+	pods          []podRow
 	schedules     []sympoziumv1alpha1.SympoziumSchedule
 	personaPacks  []sympoziumv1alpha1.PersonaPack
 	gatewayConfig *sympoziumv1alpha1.SympoziumConfig
@@ -2168,14 +2168,14 @@ type tuiModel struct {
 	githubAuthStatus     string // "pending" | "done" | "error"
 	githubAuthMessage    string // success note or error detail
 
-	editSkills              []editSkillItem   // toggleable skills list
-	editChannels            []editChannelItem // channel bindings
+	editSkills              []editSkillItem     // toggleable skills list
+	editChannels            []editChannelItem   // channel bindings
 	editWebEndpoint         editWebEndpointForm // web endpoint config
 	editGateway             editGatewayForm     // gateway config
 	showGatewayEditModal    bool                // separate modal for gateway
-	editPersonaPackName     string            // non-empty when editing a PersonaPack
-	editPersonas            []editPersonaItem // toggleable personas list
-	editPersonaHeartbeatIdx int               // index into personaHeartbeatOptions
+	editPersonaPackName     string              // non-empty when editing a PersonaPack
+	editPersonas            []editPersonaItem   // toggleable personas list
+	editPersonaHeartbeatIdx int                 // index into personaHeartbeatOptions
 
 	// Detail pane
 	detailPane       detailPaneState // collapsed, panel, or fullscreen
@@ -2221,9 +2221,9 @@ type editChannelItem struct {
 
 // editWebEndpointForm holds the editable web endpoint fields.
 type editWebEndpointForm struct {
-	enabled       bool
-	hostname      string
-	rateLimit     string // requests per minute, edited as text
+	enabled   bool
+	hostname  string
+	rateLimit string // requests per minute, edited as text
 }
 
 // editWebEndpointFieldCount is the number of fields in the web endpoint tab.
