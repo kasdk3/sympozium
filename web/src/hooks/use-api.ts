@@ -224,6 +224,11 @@ export function useActivatePersonaPack() {
       heartbeatInterval?: string;
       skillParams?: Record<string, Record<string, string>>;
       githubToken?: string;
+      personas?: Array<{
+        name: string;
+        systemPrompt?: string;
+        skills?: string[];
+      }>;
     }) => api.personaPacks.patch(name, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["personaPacks"] });

@@ -670,6 +670,11 @@ export const api = {
         heartbeatInterval?: string;
         skillParams?: Record<string, Record<string, string>>;
         githubToken?: string;
+        personas?: Array<{
+          name: string;
+          systemPrompt?: string;
+          skills?: string[];
+        }>;
       }
     ) =>
       apiFetch<PersonaPack>(`/api/v1/personapacks/${name}`, {

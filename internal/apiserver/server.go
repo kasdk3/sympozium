@@ -1031,6 +1031,14 @@ type PatchPersonaPackRequest struct {
 	HeartbeatInterval string                       `json:"heartbeatInterval,omitempty"`
 	SkillParams       map[string]map[string]string `json:"skillParams,omitempty"`
 	GithubToken       string                       `json:"githubToken,omitempty"`
+	Personas          []PersonaPatchSpec           `json:"personas,omitempty"`
+}
+
+// PersonaPatchSpec allows partial updates to individual personas by name.
+type PersonaPatchSpec struct {
+	Name         string   `json:"name"`
+	SystemPrompt *string  `json:"systemPrompt,omitempty"`
+	Skills       []string `json:"skills,omitempty"`
 }
 
 func (s *Server) patchPersonaPack(w http.ResponseWriter, r *http.Request) {
@@ -1151,6 +1159,21 @@ func (s *Server) patchPersonaPack(w http.ResponseWriter, r *http.Request) {
 		}
 		for skill, params := range req.SkillParams {
 			pp.Spec.SkillParams[skill] = params
+		}
+	}
+
+	// Apply per-persona patches (system prompt and skills).
+	for _, patch := range req.Personas {
+		for i := range pp.Spec.Personas {
+			if pp.Spec.Personas[i].Name == patch.Name {
+				if patch.SystemPrompt != nil {
+					pp.Spec.Personas[i].SystemPrompt = *patch.SystemPrompt
+				}
+				if patch.Skills != nil {
+					pp.Spec.Personas[i].Skills = patch.Skills
+				}
+				break
+			}
 		}
 	}
 
