@@ -1374,6 +1374,20 @@ func (r *AgentRunReconciler) buildContainers(
 		)
 	}
 
+	// Inject custom environment variables from AgentRun spec.
+	// Sort keys for deterministic pod specs.
+	envKeys := make([]string, 0, len(agentRun.Spec.Env))
+	for k := range agentRun.Spec.Env {
+		envKeys = append(envKeys, k)
+	}
+	sort.Strings(envKeys)
+	for _, k := range envKeys {
+		containers[0].Env = append(containers[0].Env, corev1.EnvVar{
+			Name:  k,
+			Value: agentRun.Spec.Env[k],
+		})
+	}
+
 	// Add sandbox sidecar if enabled
 	if agentRun.Spec.Sandbox != nil && agentRun.Spec.Sandbox.Enabled {
 		sandboxImage := r.imageRef("sandbox")

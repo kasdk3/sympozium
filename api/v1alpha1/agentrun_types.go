@@ -16,6 +16,10 @@ type AgentRunSpec struct {
 	// SessionKey is the unique session identifier for this run.
 	SessionKey string `json:"sessionKey"`
 
+	// Env defines custom environment variables to pass to the agent container.
+	// +optional
+	Env map[string]string `json:"env,omitempty"`
+
 	// Parent contains parent run information for sub-agents.
 	// +optional
 	Parent *ParentRunRef `json:"parent,omitempty"`

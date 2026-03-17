@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,7 +24,15 @@ import (
 
 // maxToolIterations is the maximum number of tool-call round-trips before
 // the agent stops and returns whatever text it has.
-const maxToolIterations = 25
+var maxToolIterations = 50
+
+func init() {
+	if val := os.Getenv("MAX_TOOL_ITERATIONS"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			maxToolIterations = n
+		}
+	}
+}
 
 type agentResult struct {
 	Status   string `json:"status"`

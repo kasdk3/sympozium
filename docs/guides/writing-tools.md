@@ -4,6 +4,43 @@ This guide explains how to add new tools to the Sympozium agent-runner. Tools ar
 
 ---
 
+## Configuration
+
+### MAX_TOOL_ITERATIONS
+
+Environment variable to configure maximum tool-call iterations (default: 50):
+
+```bash
+export MAX_TOOL_ITERATIONS=50
+sympozium serve --agent-runner
+```
+
+Useful when working with models that require more reasoning steps, such as LM Studio with Qwen3.5.
+
+Alternatively, set it per-AgentRun via the `spec.env` field:
+
+```yaml
+apiVersion: sympozium.ai/v1alpha1
+kind: AgentRun
+metadata:
+  name: my-run
+spec:
+  instanceRef: my-instance
+  agentId: primary
+  sessionKey: run-1
+  task: "Analyze this complex problem"
+  model:
+    provider: ollama
+    model: qwen3.5
+    baseURL: http://localhost:11434/v1
+  env:
+    MAX_TOOL_ITERATIONS: "50"  # Per-run override
+```
+
+This is useful when different runs need different iteration limits without rebuilding the agent-runner image.
+
+---
+
 ## Concepts
 
 A **Tool** is a function the LLM can call during an agent run. Each tool has:

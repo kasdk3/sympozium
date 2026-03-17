@@ -49,11 +49,11 @@ help: ## Display this help
 
 build: $(addprefix build-,$(BINARIES)) $(addprefix build-channel-,$(CHANNELS)) ## Build all binaries
 
-build-%: ## Build a specific binary (e.g., make build-controller)
-	$(GOBUILD) -o $(BIN_DIR)/$* ./cmd/$*/
-
 build-channel-%: ## Build a specific channel binary
 	$(GOBUILD) -o $(BIN_DIR)/channel-$* ./channels/$*/
+
+build-%: ## Build a specific binary (e.g., make build-controller)
+	$(GOBUILD) -o $(BIN_DIR)/$* ./cmd/$*/
 
 test: ## Run tests
 	$(GOTEST) -race -coverprofile=coverage.out ./...
