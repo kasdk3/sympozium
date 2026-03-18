@@ -9634,6 +9634,9 @@ func tuiPersonaApply(ns string, w *wizardState) (string, error) {
 		pack.Spec.TaskOverride = w.teamTask
 	}
 
+	// Store base URL for local/custom providers (e.g. Ollama, LM Studio, Azure OpenAI).
+	pack.Spec.BaseURL = w.baseURL
+
 	// Update each persona with the chosen model and channel bindings.
 	var enabledChannels []string
 	channelConfigs := make(map[string]string)
