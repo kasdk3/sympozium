@@ -742,9 +742,11 @@ func (r *AgentRunReconciler) reconcilePendingServer(ctx context.Context, log log
 	}
 
 	labels := map[string]string{
-		"sympozium.ai/agent-run": agentRun.Name,
-		"sympozium.ai/instance":  agentRun.Spec.InstanceRef,
-		"sympozium.ai/component": "agent-server",
+		"sympozium.ai/agent-run":       agentRun.Name,
+		"sympozium.ai/instance":        agentRun.Spec.InstanceRef,
+		"sympozium.ai/component":       "agent-server",
+		"app.kubernetes.io/part-of":    "sympozium",
+		"app.kubernetes.io/managed-by": "sympozium-controller",
 	}
 
 	deployName := agentRun.Name + "-server"
@@ -1187,9 +1189,11 @@ func (r *AgentRunReconciler) buildJob(
 	mcpServers []sympoziumv1alpha1.MCPServerRef,
 ) *batchv1.Job {
 	labels := map[string]string{
-		"sympozium.ai/agent-run": agentRun.Name,
-		"sympozium.ai/instance":  agentRun.Spec.InstanceRef,
-		"sympozium.ai/component": "agent-run",
+		"sympozium.ai/agent-run":       agentRun.Name,
+		"sympozium.ai/instance":        agentRun.Spec.InstanceRef,
+		"sympozium.ai/component":       "agent-run",
+		"app.kubernetes.io/part-of":    "sympozium",
+		"app.kubernetes.io/managed-by": "sympozium-controller",
 	}
 
 	ttl := int32(300)

@@ -164,9 +164,9 @@ containerSecurityContext:
 # -- OpenTelemetry Observability
 observability:
   # -- Master switch. When false, all components init noop OTel (zero overhead).
-  enabled: false
+  enabled: true
   # -- OTLP collector endpoint. Example: "http://otel-collector.monitoring.svc:4317"
-  endpoint: ""
+  endpoint: "sympozium-otel-collector.sympozium-system.svc:4317"
   # -- OTLP transport: "grpc" (default, port 4317) or "http/protobuf" (port 4318)
   protocol: "grpc"
   # -- Static OTLP export headers (e.g., {"Authorization": "Bearer token"}).

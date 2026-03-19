@@ -67,6 +67,15 @@ spec:
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: {{ include "sympozium.otelResourceAttrs" . | quote }}
             {{- end }}
+            # Default observability config for PersonaPack-created instances.
+            - name: SYMPOZIUM_DEFAULT_OTEL_ENABLED
+              value: {{ .Values.observability.defaultInstance.enabled | quote }}
+            - name: SYMPOZIUM_DEFAULT_OTEL_ENDPOINT
+              value: {{ .Values.observability.defaultInstance.otlpEndpoint | quote }}
+            - name: SYMPOZIUM_DEFAULT_OTEL_PROTOCOL
+              value: {{ .Values.observability.defaultInstance.otlpProtocol | quote }}
+            - name: SYMPOZIUM_DEFAULT_OTEL_SERVICE_NAME
+              value: {{ .Values.observability.defaultInstance.serviceName | quote }}
             {{- end }}
           ports:
             - containerPort: 8081

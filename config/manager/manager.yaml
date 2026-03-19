@@ -43,6 +43,18 @@ spec:
           env:
             - name: NATS_URL
               value: nats://nats.sympozium-system.svc:4222
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "sympozium-otel-collector.sympozium-system.svc:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "sympozium-controller"
+            - name: SYMPOZIUM_DEFAULT_OTEL_ENABLED
+              value: "true"
+            - name: SYMPOZIUM_DEFAULT_OTEL_ENDPOINT
+              value: "sympozium-otel-collector.sympozium-system.svc:4317"
+            - name: SYMPOZIUM_DEFAULT_OTEL_PROTOCOL
+              value: "grpc"
+            - name: SYMPOZIUM_DEFAULT_OTEL_SERVICE_NAME
+              value: "sympozium"
           ports:
             - containerPort: 8081
               name: health

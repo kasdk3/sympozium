@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -28,6 +29,35 @@ type PersonaPackReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 	Log    logr.Logger
+}
+
+// defaultObservabilitySpec builds an ObservabilitySpec from env vars injected
+// by the Helm chart / kustomize, falling back to sensible defaults matching the
+// built-in OTel collector's service address.
+func defaultObservabilitySpec() *sympoziumv1alpha1.ObservabilitySpec {
+	enabled := strings.EqualFold(os.Getenv("SYMPOZIUM_DEFAULT_OTEL_ENABLED"), "true")
+	endpoint := os.Getenv("SYMPOZIUM_DEFAULT_OTEL_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "sympozium-otel-collector.sympozium-system.svc:4317"
+	}
+	protocol := os.Getenv("SYMPOZIUM_DEFAULT_OTEL_PROTOCOL")
+	if protocol == "" {
+		protocol = "grpc"
+	}
+	serviceName := os.Getenv("SYMPOZIUM_DEFAULT_OTEL_SERVICE_NAME")
+	if serviceName == "" {
+		serviceName = "sympozium"
+	}
+	return &sympoziumv1alpha1.ObservabilitySpec{
+		Enabled:      enabled,
+		OTLPEndpoint: endpoint,
+		OTLPProtocol: protocol,
+		ServiceName:  serviceName,
+		ResourceAttributes: map[string]string{
+			"deployment.environment": "cluster",
+			"k8s.cluster.name":       "unknown",
+		},
+	}
 }
 
 func isManagedPersonaAuthSecret(packName, secretName string, labels map[string]string) bool {
@@ -389,16 +419,7 @@ func (r *PersonaPackReconciler) buildInstance(
 				MaxSizeKB:    256,
 				SystemPrompt: persona.SystemPrompt,
 			},
-			Observability: &sympoziumv1alpha1.ObservabilitySpec{
-				Enabled:      true,
-				OTLPEndpoint: "sympozium-otel-collector.sympozium-system.svc:4317",
-				OTLPProtocol: "grpc",
-				ServiceName:  "sympozium",
-				ResourceAttributes: map[string]string{
-					"deployment.environment": "cluster",
-					"k8s.cluster.name":       "unknown",
-				},
-			},
+			Observability: defaultObservabilitySpec(),
 		},
 	}
 
