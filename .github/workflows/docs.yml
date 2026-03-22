@@ -50,7 +50,7 @@ jobs:
           done
           # Generate index.yaml and serve chart packages from Pages
           if ls .helm-packages/*.tgz 1>/dev/null 2>&1; then
-            helm repo index .helm-packages --url https://kasdk3.github.io/charts
+            helm repo index .helm-packages --url https://kasdk3.github.io/sympozium/charts
             cp .helm-packages/index.yaml _site/charts/
             cp .helm-packages/*.tgz _site/charts/
           else
