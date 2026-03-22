@@ -26,7 +26,7 @@ import (
 
 // maxToolIterations is the maximum number of tool-call round-trips before
 // the agent stops and returns whatever text it has.
-var maxToolIterations = 50
+var maxToolIterations = 150
 
 func init() {
 	if val := os.Getenv("MAX_TOOL_ITERATIONS"); val != "" {
