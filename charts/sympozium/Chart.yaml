@@ -2,17 +2,16 @@ apiVersion: v2
 name: sympozium
 description: Sympozium — run a fleet of AI agents on Kubernetes
 type: application
-version: 0.1
-appVersion: "0.1"
-home: https://github.com/sympozium-ai/sympozium
+version: 0.1.1
+appVersion: "0.1.1"
+home: https://github.com/kasdk3/sympozium
 sources:
-  - https://github.com/sympozium-ai/sympozium
+  - https://github.com/kasdk3/sympozium
 maintainers:
   - name: sympozium-ai
     url: https://github.com/sympozium-ai
-  - name: Three Foxes (in a Trenchcoat)
-    email: threefoxes53235@gmail.com
-    url: https://github.com/three-foxes-in-a-trenchcoat
+  - name: kasdk3
+    url: https://github.com/kasdk3
 keywords:
   - kubernetes
   - ai
@@ -20,4 +19,4 @@ keywords:
   - agentic
   - llm
   - sympozium
-icon: https://raw.githubusercontent.com/sympozium-ai/sympozium/main/icon.png
+icon: https://raw.githubusercontent.com/kasdk3/sympozium/main/icon.png
