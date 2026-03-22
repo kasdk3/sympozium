@@ -8,7 +8,6 @@ on:
       - 'mkdocs.yml'
       - 'index.html'
       - 'install.sh'
-      - 'CNAME'
       - 'charts/**'
   workflow_dispatch:
 
@@ -51,7 +50,7 @@ jobs:
           done
           # Generate index.yaml and serve chart packages from Pages
           if ls .helm-packages/*.tgz 1>/dev/null 2>&1; then
-            helm repo index .helm-packages --url https://deploy.kasdk3.github.io/charts
+            helm repo index .helm-packages --url https://kasdk3.github.io/charts
             cp .helm-packages/index.yaml _site/charts/
             cp .helm-packages/*.tgz _site/charts/
           else
@@ -62,7 +61,6 @@ jobs:
         run: |
           cp index.html _site/index.html
           cp install.sh _site/install.sh
-          cp CNAME _site/CNAME
 
       - uses: actions/upload-pages-artifact@v3
 
