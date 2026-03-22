@@ -123,6 +123,7 @@ jobs:
           - skill-github-gitops
           - skill-llmfit
           - node-probe
+          - mcp-bridge
     steps:
       - uses: actions/checkout@v4
 
