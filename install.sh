@@ -8,7 +8,7 @@
 
 set -e
 
-REPO="sympozium-ai/sympozium"
+REPO="kasdk3/sympozium"
 BINARY="sympozium"
 LOCAL_INSTALL=""
 

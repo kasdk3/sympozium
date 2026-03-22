@@ -547,7 +547,7 @@ func newVersionCmd() *cobra.Command {
 }
 
 const (
-	ghRepo            = "sympozium-ai/sympozium"
+	ghRepo            = "kasdk3/sympozium"
 	manifestAsset     = "sympozium-manifests.tar.gz"
 	gatewayAPICRDsURL = "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml"
 )

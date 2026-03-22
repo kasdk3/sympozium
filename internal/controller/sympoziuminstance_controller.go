@@ -209,7 +209,7 @@ func (r *SympoziumInstanceReconciler) buildChannelDeployment(
 	}
 	registry := os.Getenv("SYMPOZIUM_IMAGE_REGISTRY")
 	if registry == "" {
-		registry = "ghcr.io/sympozium-ai/sympozium"
+		registry = "ghcr.io/kasdk3/sympozium"
 	}
 	image := fmt.Sprintf("%s/channel-%s:%s", registry, ch.Type, tag)
 

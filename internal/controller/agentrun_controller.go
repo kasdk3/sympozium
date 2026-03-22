@@ -75,7 +75,7 @@ type AgentRunReconciler struct {
 	RunHistoryLimit int    // max completed runs to keep per instance (0 = use default)
 }
 
-const imageRegistry = "ghcr.io/sympozium-ai/sympozium"
+const imageRegistry = "ghcr.io/kasdk3/sympozium"
 
 // imageRef returns a fully qualified image reference using the reconciler's tag.
 func (r *AgentRunReconciler) imageRef(name string) string {

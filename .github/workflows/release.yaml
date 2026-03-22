@@ -244,7 +244,7 @@ jobs:
   #         cat > homebrew-tap/Formula/sympozium.rb << RUBY
   #         class Sympozium < Formula
   #           desc "Kubernetes-native AI agent orchestration platform CLI"
-  #           homepage "https://github.com/sympozium-ai/sympozium"
+  #           homepage "https://github.com/kasdk3/sympozium"
   #           version "${VERSION}"
   #           license "Apache-2.0"
 
