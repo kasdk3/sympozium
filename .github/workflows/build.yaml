@@ -124,7 +124,6 @@ jobs:
           - skill-llmfit
           - mcp-bridge
           - node-probe
-          - mcp-bridge
     steps:
       - uses: actions/checkout@v4
 

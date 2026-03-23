@@ -111,7 +111,6 @@ jobs:
           - mcp-bridge
           - web-proxy
           - node-probe
-          - mcp-bridge
     steps:
       - uses: actions/checkout@v4
 
