@@ -78,6 +78,10 @@ Sympozium serves **two powerful use cases** on one Kubernetes-native platform:
 1. **Orchestrate fleets of AI agents** — customer support, code review, data pipelines, or any domain-specific workflow. Each agent gets its own pod, RBAC, and network policy with proper tenant isolation.
 2. **Administer the cluster itself agentically** — point agents inward to diagnose failures, scale deployments, triage alerts, and remediate issues, all with Kubernetes-native isolation, RBAC, and audit trails.
 
+### Persistent Memory with SQLite
+
+Agents remember across runs. The `memory` SkillPack provides a **SQLite + FTS5** database on a PersistentVolume, exposed as `memory_search`, `memory_store`, and `memory_list` tools. No external database required.
+
 ### Isolated Skill Sidecars
 
 **Every skill runs in its own sidecar container** — a separate, isolated process injected into the agent pod at runtime with ephemeral least-privilege RBAC that's garbage-collected when the run finishes.
@@ -95,6 +99,7 @@ Sympozium serves **two powerful use cases** on one Kubernetes-native platform:
 | Custom Resources | [deploy.sympozium.ai/docs/concepts/custom-resources](https://deploy.sympozium.ai/docs/concepts/custom-resources/) |
 | PersonaPacks | [deploy.sympozium.ai/docs/concepts/personapacks](https://deploy.sympozium.ai/docs/concepts/personapacks/) |
 | Skills & Sidecars | [deploy.sympozium.ai/docs/concepts/skills](https://deploy.sympozium.ai/docs/concepts/skills/) |
+| Persistent Memory | [deploy.sympozium.ai/docs/concepts/persistent-memory](https://deploy.sympozium.ai/docs/concepts/persistent-memory/) |
 | Channels | [deploy.sympozium.ai/docs/concepts/channels](https://deploy.sympozium.ai/docs/concepts/channels/) |
 | Security | [deploy.sympozium.ai/docs/concepts/security](https://deploy.sympozium.ai/docs/concepts/security/) |
 | CLI & TUI Reference | [deploy.sympozium.ai/docs/reference/cli](https://deploy.sympozium.ai/docs/reference/cli/) |

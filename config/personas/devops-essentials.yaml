@@ -23,6 +23,7 @@ spec:
       skills:
         - k8s-ops
         - incident-response
+        - memory
       toolPolicy:
         allow:
           - read_file
@@ -49,6 +50,7 @@ spec:
         recommendations for right-sizing with estimated savings.
       skills:
         - k8s-ops
+        - memory
       toolPolicy:
         allow:
           - read_file

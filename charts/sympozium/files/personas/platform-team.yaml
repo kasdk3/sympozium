@@ -21,6 +21,7 @@ spec:
         without explicit approval — your role is to observe and report.
       skills:
         - k8s-ops
+        - memory
       toolPolicy:
         allow:
           - read_file
@@ -53,6 +54,7 @@ spec:
       skills:
         - k8s-ops
         - llmfit
+        - memory
       toolPolicy:
         allow:
           - read_file
@@ -82,6 +84,7 @@ spec:
       skills:
         - k8s-ops
         - code-review
+        - memory
       toolPolicy:
         allow:
           - read_file

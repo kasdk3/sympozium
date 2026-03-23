@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -62,6 +63,9 @@ func (r *SympoziumInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			if err := r.cleanupMemoryConfigMap(ctx, &instance); err != nil {
 				log.Error(err, "failed to cleanup memory ConfigMap")
 			}
+			if err := r.cleanupMemoryDeployment(ctx, &instance); err != nil {
+				log.Error(err, "failed to cleanup memory deployment")
+			}
 			patch := client.MergeFrom(instance.DeepCopy())
 			controllerutil.RemoveFinalizer(&instance, sympoziumInstanceFinalizer)
 			if err := r.Patch(ctx, &instance, patch); err != nil {
@@ -96,9 +100,15 @@ func (r *SympoziumInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 	}
 
-	// Reconcile memory ConfigMap
+	// Reconcile memory ConfigMap (legacy) and memory PVC (SkillPack-based).
 	if err := r.reconcileMemoryConfigMap(ctx, log, &instance); err != nil {
 		log.Error(err, "failed to reconcile memory ConfigMap")
+	}
+	if err := r.reconcileMemoryPVC(ctx, log, &instance); err != nil {
+		log.Error(err, "failed to reconcile memory PVC")
+	}
+	if err := r.reconcileMemoryDeployment(ctx, log, &instance); err != nil {
+		log.Error(err, "failed to reconcile memory deployment")
 	}
 
 	// Reconcile web endpoint
@@ -437,6 +447,243 @@ func (r *SympoziumInstanceReconciler) cleanupMemoryConfigMap(ctx context.Context
 	if err := r.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
 		return err
 	}
+	return nil
+}
+
+// reconcileMemoryPVC ensures a PersistentVolumeClaim exists for instances that
+// use the "memory" SkillPack. The PVC persists the SQLite database across
+// ephemeral agent pod runs.
+func (r *SympoziumInstanceReconciler) reconcileMemoryPVC(ctx context.Context, log logr.Logger, instance *sympoziumv1alpha1.SympoziumInstance) error {
+	if !instanceHasMemorySkill(instance) {
+		return nil
+	}
+
+	pvcName := fmt.Sprintf("%s-memory-db", instance.Name)
+	var pvc corev1.PersistentVolumeClaim
+	err := r.Get(ctx, types.NamespacedName{Name: pvcName, Namespace: instance.Namespace}, &pvc)
+	if err == nil {
+		return nil // Already exists.
+	}
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	storageSize := resource.MustParse("1Gi")
+	pvc = corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pvcName,
+			Namespace: instance.Namespace,
+			Labels: map[string]string{
+				"sympozium.ai/instance":  instance.Name,
+				"sympozium.ai/component": "memory-db",
+			},
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: storageSize,
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(instance, &pvc, r.Scheme); err != nil {
+		return err
+	}
+
+	log.Info("Creating memory PVC", "name", pvcName)
+	return r.Create(ctx, &pvc)
+}
+
+// instanceHasMemorySkill returns true if the instance references the "memory" SkillPack.
+func instanceHasMemorySkill(instance *sympoziumv1alpha1.SympoziumInstance) bool {
+	for _, skill := range instance.Spec.Skills {
+		if skill.SkillPackRef == "memory" {
+			return true
+		}
+	}
+	return false
+}
+
+// reconcileMemoryDeployment ensures a Deployment + Service exist for the memory
+// server when the "memory" SkillPack is attached. The Deployment mounts the
+// memory PVC and exposes an HTTP API that agent pods call.
+func (r *SympoziumInstanceReconciler) reconcileMemoryDeployment(ctx context.Context, log logr.Logger, instance *sympoziumv1alpha1.SympoziumInstance) error {
+	if !instanceHasMemorySkill(instance) {
+		return nil
+	}
+
+	deployName := fmt.Sprintf("%s-memory", instance.Name)
+	pvcName := fmt.Sprintf("%s-memory-db", instance.Name)
+
+	tag := r.ImageTag
+	if tag == "" {
+		tag = "latest"
+	}
+	registry := os.Getenv("SYMPOZIUM_IMAGE_REGISTRY")
+	if registry == "" {
+		registry = "ghcr.io/sympozium-ai/sympozium"
+	}
+	image := fmt.Sprintf("%s/skill-memory:%s", registry, tag)
+
+	// --- Deployment ---
+	var existingDeploy appsv1.Deployment
+	err := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: instance.Namespace}, &existingDeploy)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if err == nil {
+		return nil // Already exists.
+	}
+
+	replicas := int32(1)
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deployName,
+			Namespace: instance.Namespace,
+			Labels: map[string]string{
+				"sympozium.ai/component": "memory",
+				"sympozium.ai/instance":  instance.Name,
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType, // RWO PVC — only one pod at a time
+			},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"sympozium.ai/component": "memory",
+					"sympozium.ai/instance":  instance.Name,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"sympozium.ai/component": "memory",
+						"sympozium.ai/instance":  instance.Name,
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:            "memory-server",
+							Image:           image,
+							ImagePullPolicy: corev1.PullIfNotPresent,
+							Ports: []corev1.ContainerPort{
+								{Name: "http", ContainerPort: 8080, Protocol: corev1.ProtocolTCP},
+							},
+							Env: []corev1.EnvVar{
+								{Name: "MEMORY_DB_PATH", Value: "/data/memory.db"},
+								{Name: "MEMORY_PORT", Value: "8080"},
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{Name: "memory-db", MountPath: "/data"},
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/health",
+										Port: intstr.FromInt32(8080),
+									},
+								},
+								InitialDelaySeconds: 2,
+								PeriodSeconds:       10,
+							},
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/health",
+										Port: intstr.FromInt32(8080),
+									},
+								},
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       30,
+							},
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("50m"),
+									corev1.ResourceMemory: resource.MustParse("64Mi"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("200m"),
+									corev1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "memory-db",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: pvcName,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(instance, deploy, r.Scheme); err != nil {
+		return err
+	}
+
+	log.Info("Creating memory Deployment", "name", deployName)
+	if err := r.Create(ctx, deploy); err != nil {
+		return err
+	}
+
+	// --- Service ---
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deployName,
+			Namespace: instance.Namespace,
+			Labels: map[string]string{
+				"sympozium.ai/component": "memory",
+				"sympozium.ai/instance":  instance.Name,
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				"sympozium.ai/component": "memory",
+				"sympozium.ai/instance":  instance.Name,
+			},
+			Ports: []corev1.ServicePort{
+				{Name: "http", Port: 8080, TargetPort: intstr.FromInt32(8080), Protocol: corev1.ProtocolTCP},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(instance, svc, r.Scheme); err != nil {
+		return err
+	}
+
+	log.Info("Creating memory Service", "name", deployName)
+	return r.Create(ctx, svc)
+}
+
+// cleanupMemoryDeployment deletes the memory Deployment and Service for an instance.
+func (r *SympoziumInstanceReconciler) cleanupMemoryDeployment(ctx context.Context, instance *sympoziumv1alpha1.SympoziumInstance) error {
+	name := fmt.Sprintf("%s-memory", instance.Name)
+
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: instance.Namespace},
+	}
+	if err := r.Delete(ctx, deploy); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: instance.Namespace},
+	}
+	if err := r.Delete(ctx, svc); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
 	return nil
 }
 

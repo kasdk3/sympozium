@@ -71,9 +71,13 @@ graph TB
         CM -- "creates Deployment<br/>+ Service + HTTPRoute" --> WE
 
         subgraph MEM["Persistent Memory"]
-            MCM[("ConfigMap<br/><small>&lt;instance&gt;-memory</small>")]
-            A1 -- "reads /memory<br/>MEMORY.md" --> MCM
-            CM -- "extracts & patches<br/>memory markers" --> MCM
+            MSCAR["Memory Sidecar<br/><small>SQLite + FTS5</small>"]
+            PVC[("PersistentVolume<br/><small>memory.db</small>")]
+            MCM[("ConfigMap<br/><small>&lt;instance&gt;-memory<br/>(legacy fallback)</small>")]
+            A1 -. "IPC /ipc volume<br/>memory_search · memory_store<br/>memory_list" .- MSCAR
+            MSCAR -- "reads / writes" --> PVC
+            A1 -. "reads /memory<br/>MEMORY.md (legacy)" .-> MCM
+            CM -- "extracts & patches<br/>memory markers (legacy)" --> MCM
         end
 
         subgraph NP["Node Probe  ·  DaemonSet (opt-in)"]
@@ -120,7 +124,7 @@ graph TB
 
 1. **A message arrives** via a channel pod (Telegram, Slack, etc.) and is published to the NATS event bus.
 2. **The controller creates an AgentRun CR**, which reconciles into an ephemeral K8s Job — an agent container + IPC bridge sidecar + optional sandbox + skill sidecars (with auto-provisioned RBAC).
-3. **The agent container** calls the configured LLM provider (OpenAI, Anthropic, Azure, Ollama, or any OpenAI-compatible endpoint), with skills mounted as files, persistent memory injected from a ConfigMap, and tool sidecars providing runtime capabilities like `kubectl`.
+3. **The agent container** calls the configured LLM provider (OpenAI, Anthropic, Azure, Ollama, or any OpenAI-compatible endpoint), with skills mounted as files, persistent memory provided by the memory sidecar (SQLite + FTS5 on a PersistentVolume), and tool sidecars providing runtime capabilities like `kubectl`. A legacy ConfigMap-based memory path is preserved as a fallback.
 4. **Results flow back** through the IPC bridge → NATS → channel pod → user. The controller extracts structured results and memory updates from pod logs.
 5. **Web endpoints** expose agents as HTTP APIs. When an instance has the `web-endpoint` skill, the controller creates a long-lived Deployment (serving mode) with a web-proxy sidecar. The proxy accepts OpenAI-compatible (`/v1/chat/completions`) and MCP (`/sse`, `/message`) requests, creating per-request AgentRun Jobs. An Envoy Gateway with per-instance HTTPRoutes provides external access with TLS.
 6. **MCP server integration** — `MCPServer` CRDs define external tool providers using the Model Context Protocol. The controller deploys managed servers (from container images) or connects to external ones, probes them for available tools, and records discovered tools in the resource status. Agent pods access MCP tools through the `mcp-bridge` skill sidecar, which translates between the agent's tool interface and MCP's SSE/stdio transport. Tool names are prefixed to avoid collisions when multiple MCP servers are active. The web UI and CLI provide full CRUD management.
@@ -138,7 +142,7 @@ graph TB
 | **Sandbox isolation** | Long-lived Docker sidecar | Pod **SecurityContext** + PodSecurity admission |
 | **IPC** | In-process EventEmitter | Filesystem sidecar + **NATS JetStream** |
 | **Tool/feature gating** | In-process pipeline | **Admission webhooks** + `SympoziumPolicy` CRD |
-| **Persistent memory** | Files on disk | **ConfigMap** per instance, controller-managed |
+| **Persistent memory** | Files on disk | **SQLite + FTS5** on PersistentVolume via memory sidecar (ConfigMap legacy fallback) |
 | **Scheduled tasks** | Cron jobs / external scripts | **SympoziumSchedule CRD** with cron controller |
 | **State** | SQLite + flat files | **etcd** (CRDs) + PostgreSQL + object storage |
 | **Multi-tenancy** | Single-instance file lock | **Namespaced CRDs**, RBAC, NetworkPolicy |
@@ -158,7 +162,7 @@ graph TB
 | **NATS JetStream** | StatefulSet | Durable pub/sub with replay — channels and control plane communicate without direct coupling |
 | **NetworkPolicy isolation** | NetworkPolicy | Agent pods get deny-all egress; only the IPC bridge connects to the event bus — agents cannot reach the internet or other pods |
 | **Policy-as-CRD** | Admission Webhook | `SympoziumPolicy` resources gate tools, sandboxes, and features — enforced at admission time, not at runtime |
-| **Memory-as-ConfigMap** | ConfigMap | Persistent agent memory lives in etcd — no external database, no file system, fully declarative and backed up with cluster state |
+| **Memory-as-SQLite** | PersistentVolume + sidecar | Persistent agent memory uses SQLite with FTS5 full-text search on a PVC — supports semantic search via `memory_search`, tagging via `memory_store`, and is upgradeable to vector search. Legacy ConfigMap fallback preserved for migration |
 | **Schedule-as-CRD** | CronJob analogy | `SympoziumSchedule` resources define recurring tasks with cron expressions — the controller creates AgentRuns, not the user |
 | **Skills-as-ConfigMap** | ConfigMap volume | SkillPacks generate ConfigMaps mounted into agent pods — portable, versionable, namespace-scoped |
 | **Skill sidecars with auto-RBAC** | Role / ClusterRole | SkillPacks can declare sidecar containers with RBAC rules — the controller injects the container and provisions ephemeral, least-privilege RBAC per run |
@@ -178,6 +182,7 @@ sympozium/
 │   ├── controller/         # Controller manager (reconciles all CRDs)
 │   ├── apiserver/          # HTTP + WebSocket API server (+ embedded web UI)
 │   ├── ipc-bridge/         # IPC bridge sidecar (fsnotify → NATS)
+│   ├── memory-server/      # Memory sidecar (SQLite + FTS5 persistent memory)
 │   ├── web-proxy/          # Web proxy (OpenAI-compat API + MCP gateway)
 │   ├── webhook/            # Admission webhook (policy enforcement)
 │   ├── node-probe/         # Node probe DaemonSet (inference provider discovery)

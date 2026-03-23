@@ -28,6 +28,7 @@ spec:
       skills:
         - mcp-bridge
         - k8s-ops
+        - memory
       toolPolicy:
         allow:
           - read_file
@@ -65,6 +66,7 @@ spec:
         - mcp-bridge
         - k8s-ops
         - incident-response
+        - memory
       toolPolicy:
         allow:
           - read_file

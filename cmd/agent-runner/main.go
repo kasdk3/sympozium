@@ -138,28 +138,37 @@ func main() {
 		log.Printf("tools enabled: %d tool(s) registered", len(tools))
 	}
 
-	// Read existing memory if available.
-	var memoryContent string
-	if memoryEnabled {
+	// Load memory tools if the memory server is available (standalone deployment).
+	if memoryTools := initMemoryTools(); len(memoryTools) > 0 {
+		tools = append(tools, memoryTools...)
+
+		systemPrompt += "\n\n## Persistent Memory\n\n" +
+			"You have access to persistent memory tools that survive across runs.\n" +
+			"**Before starting any investigation**, call `memory_search` with relevant keywords " +
+			"to check if similar issues have been diagnosed before.\n" +
+			"**After completing your task**, call `memory_store` to save key findings, " +
+			"root causes, and resolution steps for future reference.\n" +
+			"Be specific in stored content — include service names, namespaces, error messages, and timestamps."
+
+		log.Printf("memory tools loaded: %d tool(s)", len(memoryTools))
+	} else if memoryEnabled {
+		// Fallback: legacy ConfigMap memory for backward compatibility.
+		var memoryContent string
 		if b, err := os.ReadFile("/memory/MEMORY.md"); err == nil {
 			memoryContent = strings.TrimSpace(string(b))
-			log.Printf("loaded memory (%d bytes)", len(memoryContent))
+			log.Printf("loaded legacy memory (%d bytes)", len(memoryContent))
 		}
-	}
-
-	// Prepend memory context to the task if present.
-	if memoryContent != "" && memoryContent != "# Agent Memory\n\nNo memories recorded yet." {
-		task = fmt.Sprintf("## Your Memory\nThe following is your persistent memory from prior interactions:\n\n%s\n\n## Current Task\n%s", memoryContent, task)
-	}
-
-	// If memory is enabled, add memory instructions to system prompt.
-	if memoryEnabled {
-		memoryInstruction := "\n\nYou have persistent memory. After completing your task, " +
-			"output a memory update block wrapped in markers like this:\n" +
-			"__SYMPOZIUM_MEMORY__\n<your updated MEMORY.md content>\n__SYMPOZIUM_MEMORY_END__\n" +
-			"Include key facts, preferences, and context from this and past interactions. " +
-			"Keep it concise (under 256KB). Use markdown format."
-		systemPrompt += memoryInstruction
+		if memoryContent != "" && memoryContent != "# Agent Memory\n\nNo memories recorded yet." {
+			task = fmt.Sprintf("## Your Memory\nThe following is your persistent memory from prior interactions:\n\n%s\n\n## Current Task\n%s", memoryContent, task)
+		}
+		if memoryEnabled {
+			memoryInstruction := "\n\nYou have persistent memory. After completing your task, " +
+				"output a memory update block wrapped in markers like this:\n" +
+				"__SYMPOZIUM_MEMORY__\n<your updated MEMORY.md content>\n__SYMPOZIUM_MEMORY_END__\n" +
+				"Include key facts, preferences, and context from this and past interactions. " +
+				"Keep it concise (under 256KB). Use markdown format."
+			systemPrompt += memoryInstruction
+		}
 	}
 
 	apiKey := firstNonEmpty(
@@ -179,7 +188,7 @@ func main() {
 
 	obs := initObservability(ctx)
 	defer func() {
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer shutdownCancel()
 		if err := obs.shutdown(shutdownCtx); err != nil {
 			log.Printf("failed to shutdown OTel providers: %v", err)

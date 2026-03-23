@@ -218,6 +218,10 @@ func executeToolCall(ctx context.Context, name string, argsJSON string) string {
 	case ToolScheduleTask:
 		return scheduleTaskTool(args)
 	default:
+		// Check if this is a memory tool from the memory-server sidecar.
+		if isMemoryTool(name) {
+			return executeMemoryTool(ctx, name, argsJSON)
+		}
 		// Check if this is an MCP tool from the manifest
 		if mcpTool, ok := lookupMCPTool(name); ok {
 			return executeMCPTool(ctx, mcpTool, argsJSON)
