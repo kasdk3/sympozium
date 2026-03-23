@@ -3016,20 +3016,20 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if sk.name == "memory" {
 							// memory is mandatory — cannot be toggled off
 						} else {
-						sk.enabled = !sk.enabled
-						if sk.enabled && sk.name == "github-gitops" {
-							m.editSkillGithubInput = true
-							m.editSkillGithubIdx = m.editField
-							ti := textinput.New()
-							ti.Placeholder = "owner/repo (e.g. myorg/platform)"
-							ti.CharLimit = 128
-							ti.Width = 50
-							if repo, ok := sk.params["repo"]; ok {
-								ti.SetValue(repo)
+							sk.enabled = !sk.enabled
+							if sk.enabled && sk.name == "github-gitops" {
+								m.editSkillGithubInput = true
+								m.editSkillGithubIdx = m.editField
+								ti := textinput.New()
+								ti.Placeholder = "owner/repo (e.g. myorg/platform)"
+								ti.CharLimit = 128
+								ti.Width = 50
+								if repo, ok := sk.params["repo"]; ok {
+									ti.SetValue(repo)
+								}
+								ti.Focus()
+								m.editSkillGithubTI = ti
 							}
-							ti.Focus()
-							m.editSkillGithubTI = ti
-						}
 						}
 					}
 				} else if m.editTab == 3 {
@@ -3154,20 +3154,20 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if sk.name == "memory" {
 							// memory is mandatory — cannot be toggled off
 						} else {
-						sk.enabled = !sk.enabled
-						if sk.enabled && sk.name == "github-gitops" {
-							m.editSkillGithubInput = true
-							m.editSkillGithubIdx = m.editField
-							ti := textinput.New()
-							ti.Placeholder = "owner/repo (e.g. myorg/platform)"
-							ti.CharLimit = 128
-							ti.Width = 50
-							if repo, ok := sk.params["repo"]; ok {
-								ti.SetValue(repo)
+							sk.enabled = !sk.enabled
+							if sk.enabled && sk.name == "github-gitops" {
+								m.editSkillGithubInput = true
+								m.editSkillGithubIdx = m.editField
+								ti := textinput.New()
+								ti.Placeholder = "owner/repo (e.g. myorg/platform)"
+								ti.CharLimit = 128
+								ti.Width = 50
+								if repo, ok := sk.params["repo"]; ok {
+									ti.SetValue(repo)
+								}
+								ti.Focus()
+								m.editSkillGithubTI = ti
 							}
-							ti.Focus()
-							m.editSkillGithubTI = ti
-						}
 						}
 					}
 				} else if m.editTab == 3 {
