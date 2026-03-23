@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sympozium-ai/sympozium/internal/mcpbridge"
-	"github.com/sympozium-ai/sympozium/pkg/telemetry"
+	"github.com/kasdk3/sympozium/internal/mcpbridge"
+	"github.com/kasdk3/sympozium/pkg/telemetry"
 )
 
 func main() {
