@@ -754,7 +754,7 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 		req.SessionKey = fmt.Sprintf("session-%d", time.Now().UnixNano())
 	}
 	if req.Timeout == "" {
-		req.Timeout = "5m"
+		req.Timeout = "45m"
 	}
 
 	// Look up the SympoziumInstance to inherit auth, model, and skills.
