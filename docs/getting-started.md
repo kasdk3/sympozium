@@ -17,7 +17,7 @@ DevOps workflows.
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew install sympozium-ai/sympozium/sympozium
+brew install kasdk3/sympozium/sympozium
 ```
 
 ### Shell installer
@@ -29,7 +29,7 @@ curl -fsSL https://sympozium.com/install.sh | sh
 ### From source
 
 ```bash
-go install github.com/sympozium-ai/sympozium/cmd/sympozium@latest
+go install github.com/kasdk3/sympozium/cmd/sympozium@latest
 ```
 
 Verify the install:
@@ -633,7 +633,7 @@ networkPolicies:
 Then upgrade:
 
 ```bash
-helm upgrade sympozium oci://ghcr.io/sympozium-ai/sympozium/charts/sympozium \
+helm upgrade sympozium oci://ghcr.io/kasdk3/sympozium/charts/sympozium \
   -n sympozium-system -f values.yaml
 ```
 

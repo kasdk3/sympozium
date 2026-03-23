@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	sympoziumv1alpha1 "github.com/sympozium-ai/sympozium/api/v1alpha1"
+	sympoziumv1alpha1 "github.com/kasdk3/sympozium/api/v1alpha1"
 )
 
 func newInstanceTestServer(t *testing.T) (*Server, *runtime.Scheme) {

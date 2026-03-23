@@ -21,7 +21,7 @@ spec:
     maxConcurrent: 5
   sandboxPolicy:
     required: false
-    defaultImage: ghcr.io/sympozium-ai/sympozium/sandbox:latest
+    defaultImage: ghcr.io/kasdk3/sympozium/sandbox:latest
     maxCPU: "4"
     maxMemory: 8Gi
   featureGates:

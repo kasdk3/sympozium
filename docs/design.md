@@ -430,7 +430,7 @@ spec:
     image: ghcr.io/openclaw/sandbox-common:latest
   # Optional sidecar container for runtime tools + auto-RBAC
   sidecar:
-    image: ghcr.io/sympozium-ai/sympozium/skill-k8s-ops:latest
+    image: ghcr.io/kasdk3/sympozium/skill-k8s-ops:latest
     mountWorkspace: true
     resources:
       cpu: "100m"

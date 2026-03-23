@@ -11,8 +11,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	sympoziumv1alpha1 "github.com/sympozium-ai/sympozium/api/v1alpha1"
-	"github.com/sympozium-ai/sympozium/internal/eventbus"
+	sympoziumv1alpha1 "github.com/kasdk3/sympozium/api/v1alpha1"
+	"github.com/kasdk3/sympozium/internal/eventbus"
 )
 
 // JSONRPC types for MCP protocol.

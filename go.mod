@@ -1,4 +1,4 @@
-module github.com/sympozium-ai/sympozium
+module github.com/kasdk3/sympozium
 
 go 1.25.0
 

@@ -32,9 +32,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/sympozium-ai/sympozium/internal/channel"
-	"github.com/sympozium-ai/sympozium/internal/eventbus"
-	"github.com/sympozium-ai/sympozium/pkg/telemetry"
+	"github.com/kasdk3/sympozium/internal/channel"
+	"github.com/kasdk3/sympozium/internal/eventbus"
+	"github.com/kasdk3/sympozium/pkg/telemetry"
 )
 
 var slackTracer = otel.Tracer("sympozium.ai/channel-slack")

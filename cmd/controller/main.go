@@ -17,11 +17,11 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	sympoziumv1alpha1 "github.com/sympozium-ai/sympozium/api/v1alpha1"
-	"github.com/sympozium-ai/sympozium/internal/controller"
-	"github.com/sympozium-ai/sympozium/internal/eventbus"
-	"github.com/sympozium-ai/sympozium/internal/orchestrator"
-	"github.com/sympozium-ai/sympozium/pkg/telemetry"
+	sympoziumv1alpha1 "github.com/kasdk3/sympozium/api/v1alpha1"
+	"github.com/kasdk3/sympozium/internal/controller"
+	"github.com/kasdk3/sympozium/internal/eventbus"
+	"github.com/kasdk3/sympozium/internal/orchestrator"
+	"github.com/kasdk3/sympozium/pkg/telemetry"
 )
 
 var (

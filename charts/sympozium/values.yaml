@@ -1,6 +1,6 @@
 # -- Global image settings
 image:
-  registry: ghcr.io/sympozium-ai/sympozium
+  registry: ghcr.io/kasdk3/sympozium
   pullPolicy: IfNotPresent
   # -- Override the image tag (defaults to .Chart.AppVersion)
   tag: ""

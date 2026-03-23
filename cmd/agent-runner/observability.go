@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sympozium-ai/sympozium/pkg/telemetry"
+	"github.com/kasdk3/sympozium/pkg/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

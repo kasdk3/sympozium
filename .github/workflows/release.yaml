@@ -234,7 +234,7 @@ jobs:
 
   #         declare -A SHAS
   #         for platform in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64; do
-  #           URL="https://github.com/sympozium-ai/sympozium/releases/download/${TAG}/sympozium-${platform}.tar.gz"
+  #           URL="https://github.com/kasdk3/sympozium/releases/download/${TAG}/sympozium-${platform}.tar.gz"
   #           echo "Hashing ${URL}..."
   #           SHA=$(curl -fsSL "${URL}" | shasum -a 256 | awk '{print $1}')
   #           SHAS[$platform]="${SHA}"
@@ -252,20 +252,20 @@ jobs:
 
   #           on_macos do
   #             if Hardware::CPU.arm?
-  #               url "https://github.com/sympozium-ai/sympozium/releases/download/v#{version}/sympozium-darwin-arm64.tar.gz"
+  #               url "https://github.com/kasdk3/sympozium/releases/download/v#{version}/sympozium-darwin-arm64.tar.gz"
   #               sha256 "${SHAS[darwin-arm64]}"
   #             else
-  #               url "https://github.com/sympozium-ai/sympozium/releases/download/v#{version}/sympozium-darwin-amd64.tar.gz"
+  #               url "https://github.com/kasdk3/sympozium/releases/download/v#{version}/sympozium-darwin-amd64.tar.gz"
   #               sha256 "${SHAS[darwin-amd64]}"
   #             end
   #           end
 
   #           on_linux do
   #             if Hardware::CPU.arm?
-  #               url "https://github.com/sympozium-ai/sympozium/releases/download/v#{version}/sympozium-linux-arm64.tar.gz"
+  #               url "https://github.com/kasdk3/sympozium/releases/download/v#{version}/sympozium-linux-arm64.tar.gz"
   #               sha256 "${SHAS[linux-arm64]}"
   #             else
-  #               url "https://github.com/sympozium-ai/sympozium/releases/download/v#{version}/sympozium-linux-amd64.tar.gz"
+  #               url "https://github.com/kasdk3/sympozium/releases/download/v#{version}/sympozium-linux-amd64.tar.gz"
   #               sha256 "${SHAS[linux-amd64]}"
   #             end
   #           end

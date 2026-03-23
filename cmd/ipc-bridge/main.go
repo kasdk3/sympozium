@@ -12,8 +12,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/sympozium-ai/sympozium/internal/eventbus"
-	"github.com/sympozium-ai/sympozium/internal/ipc"
+	"github.com/kasdk3/sympozium/internal/eventbus"
+	"github.com/kasdk3/sympozium/internal/ipc"
 )
 
 func main() {

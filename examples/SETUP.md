@@ -6,7 +6,7 @@ Before applying any examples, you need to set up prerequisites.
 
 ```bash
 # Via brew (macOS/Linux)
-brew install sympozium-ai/sympozium/sympozium
+brew install kasdk3/sympozium/sympozium
 
 # OR via shell installer
 curl -fsSL https://sympozium.com/install.sh | sh

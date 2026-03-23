@@ -6,7 +6,7 @@ package channel
 import (
 	"context"
 
-	"github.com/sympozium-ai/sympozium/internal/eventbus"
+	"github.com/kasdk3/sympozium/internal/eventbus"
 )
 
 // InboundMessage represents a message received from an external channel.

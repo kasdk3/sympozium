@@ -32,8 +32,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	sympoziumv1alpha1 "github.com/sympozium-ai/sympozium/api/v1alpha1"
-	"github.com/sympozium-ai/sympozium/internal/eventbus"
+	sympoziumv1alpha1 "github.com/kasdk3/sympozium/api/v1alpha1"
+	"github.com/kasdk3/sympozium/internal/eventbus"
 )
 
 // Server is the Sympozium API server.

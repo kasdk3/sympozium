@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	sympoziumv1alpha1 "github.com/sympozium-ai/sympozium/api/v1alpha1"
+	sympoziumv1alpha1 "github.com/kasdk3/sympozium/api/v1alpha1"
 )
 
 // ── buildContainers: MEMORY_SERVER_URL env injection ─────────────────────────

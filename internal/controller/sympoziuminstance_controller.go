@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	sympoziumv1alpha1 "github.com/sympozium-ai/sympozium/api/v1alpha1"
+	sympoziumv1alpha1 "github.com/kasdk3/sympozium/api/v1alpha1"
 )
 
 const sympoziumInstanceFinalizer = "sympozium.ai/finalizer"
@@ -523,7 +523,7 @@ func (r *SympoziumInstanceReconciler) reconcileMemoryDeployment(ctx context.Cont
 	}
 	registry := os.Getenv("SYMPOZIUM_IMAGE_REGISTRY")
 	if registry == "" {
-		registry = "ghcr.io/sympozium-ai/sympozium"
+		registry = "ghcr.io/kasdk3/sympozium"
 	}
 	image := fmt.Sprintf("%s/skill-memory:%s", registry, tag)
 

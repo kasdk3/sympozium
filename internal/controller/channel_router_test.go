@@ -3,8 +3,8 @@ package controller
 import (
 	"testing"
 
-	sympoziumv1alpha1 "github.com/sympozium-ai/sympozium/api/v1alpha1"
-	channel "github.com/sympozium-ai/sympozium/internal/channel"
+	sympoziumv1alpha1 "github.com/kasdk3/sympozium/api/v1alpha1"
+	channel "github.com/kasdk3/sympozium/internal/channel"
 )
 
 func TestCheckChannelAccess(t *testing.T) {

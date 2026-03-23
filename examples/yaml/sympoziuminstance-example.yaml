@@ -19,11 +19,11 @@ spec:
   agents:
     default:
       model: gpt-4o
-      image: ghcr.io/sympozium-ai/sympozium/agent-codex:latest
+      image: ghcr.io/kasdk3/sympozium/agent-codex:latest
       maxTokens: 128000
     sandbox:
       enabled: true
-      image: ghcr.io/sympozium-ai/sympozium/sandbox:latest
+      image: ghcr.io/kasdk3/sympozium/sandbox:latest
       resourceLimits:
         cpu: "2"
         memory: 4Gi

@@ -2,7 +2,7 @@
 # Kubernetes-native agent orchestration platform
 
 # Image registry — matches ghcr.io/<owner>/<repo>/<image>
-REGISTRY ?= ghcr.io/sympozium-ai/sympozium
+REGISTRY ?= ghcr.io/kasdk3/sympozium
 TAG ?= latest
 
 # Tool versions
@@ -305,7 +305,7 @@ kind-reload: docker-build kind-load ## Build all images and load into Kind
 	-kubectl rollout restart daemonset sympozium-node-probe -n sympozium-system 2>/dev/null
 
 set-images: ## Stamp REGISTRY/TAG into K8s manifests
-	find config/ -name '*.yaml' -exec sed -i 's|image: ghcr.io/sympozium-ai/sympozium/\([^:]*\):[^ ]*|image: $(REGISTRY)/\1:$(TAG)|g' {} +
+	find config/ -name '*.yaml' -exec sed -i 's|image: ghcr.io/kasdk3/sympozium/\([^:]*\):[^ ]*|image: $(REGISTRY)/\1:$(TAG)|g' {} +
 	@echo "Images set to $(REGISTRY)/*:$(TAG)"
 
 ##@ Deployment

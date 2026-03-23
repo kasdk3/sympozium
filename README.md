@@ -17,8 +17,8 @@
   <b />
 </p>
 <p align="center">
-  <a href="https://github.com/sympozium-ai/sympozium/actions"><img src="https://github.com/sympozium-ai/sympozium/actions/workflows/build.yaml/badge.svg" alt="Build"></a>
-  <a href="https://github.com/sympozium-ai/sympozium/releases/latest"><img src="https://img.shields.io/github/v/release/kasdk3/sympozium"/sympozium" alt="Release"></a>
+  <a href="https://github.com/kasdk3/sympozium/actions"><img src="https://github.com/kasdk3/sympozium/actions/workflows/build.yaml/badge.svg" alt="Build"></a>
+  <a href="https://github.com/kasdk3/sympozium/releases/latest"><img src="https://img.shields.io/github/v/release/kasdk3/sympozium"/sympozium" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License"></a>
 </p>
 
@@ -36,7 +36,7 @@
 
 **Homebrew:**
 ```bash
-brew tap sympozium-ai/sympozium
+brew tap kasdk3/sympozium
 brew install sympozium
 ```
 
