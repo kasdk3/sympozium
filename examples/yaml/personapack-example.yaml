@@ -1,0 +1,70 @@
+---
+# Example PersonaPack - Create a team of agents with skills, schedules, and memory
+# Apply: kubectl apply -f personapack-example.yaml
+# Then activate via TUI: sympozium (select Personas tab, press Enter on "example-team")
+apiVersion: sympozium.ai/v1alpha1
+kind: PersonaPack
+metadata:
+  name: example-team
+  namespace: default
+spec:
+  description: "Example persona pack for demonstration"
+  category: custom
+  version: "1.0.0"
+  authRefs:
+    - secret: my-openai-key
+  policyRef: default-policy
+  personas:
+    - name: analyst
+      displayName: "Data Analyst"
+      systemPrompt: |
+        You are a data analysis specialist. You help users explore datasets,
+        generate insights, and create visualizations.
+      skills:
+        - k8s-ops
+      toolPolicy:
+        allow:
+          - read_file
+          - list_directory
+          - fetch_url
+        deny:
+          - write_file
+          - execute_command
+      schedule:
+        type: scheduled
+        cron: "0 9 * * 1"
+        task: "Weekly data review - check for anomalies and trends."
+      memory:
+        enabled: true
+        seeds:
+          - "Focus on actionable insights"
+          - "Document findings in markdown format"
+      channels:
+        - slack
+    - name: auditor
+      displayName: "Security Auditor"
+      systemPrompt: |
+        You are a security audit specialist. You scan configurations,
+        code, and infrastructure for vulnerabilities and anti-patterns.
+      skills:
+        - code-review
+        - k8s-ops
+      toolPolicy:
+        allow:
+          - read_file
+          - list_directory
+          - fetch_url
+        deny:
+          - write_file
+          - execute_command
+      schedule:
+        type: heartbeat
+        interval: "6h"
+        task: "Quick security scan - check for common vulnerabilities."
+      memory:
+        enabled: true
+        seeds:
+          - "Check for root containers"
+          - "Verify network policies exist"
+      channels:
+        - telegram

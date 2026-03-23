@@ -1,0 +1,57 @@
+---
+# How to Trigger an AgentRun
+#
+# Method 1: Via kubectl (immediate run)
+#   kubectl apply -f agentrun-example.yaml
+#
+# Method 2: Via kubectl with live watch
+#   kubectl apply -f agentrun-example.yaml && \
+#     kubectl get agentrun alice-run-001 -w
+#
+# Method 3: Via the web UI
+#   sympozium serve
+#   Navigate to http://127.0.0.1:8080
+#   Click "New Run" and fill in the form
+#
+# Method 4: Via TUI (terminal UI)
+#   sympozium
+#   Select your instance, type a message, press Enter
+#
+# Method 5: Programmatic (generate unique name)
+#   cat << 'APIEOF' | kubectl apply -f -
+#   apiVersion: sympozium.ai/v1alpha1
+#   kind: AgentRun
+#   metadata:
+#     name: manual-run-$(date +%s)
+#   spec:
+#     instanceRef: alice
+#     agentID: primary
+#     task: "List all pods in the cluster"
+#     model:
+#       name: gpt-4o
+#       provider: openai
+#     timeout: "5m"
+#   APIEOF
+#
+# Monitor phase transitions:
+#   Pending → Running → Succeeded (or Failed)
+#
+# View results:
+#   kubectl get agentrun alice-run-001 -o yaml
+#   kubectl logs job/agent-run-alice-run-001
+#   kubectl get agentrun alice-run-001 -o jsonpath='{.status.result}'
+---
+# Quick test run (no instance needed if using default values)
+apiVersion: sympozium.ai/v1alpha1
+kind: AgentRun
+metadata:
+  name: test-run-$(date +%s)
+  namespace: default
+spec:
+  instanceRef: alice
+  agentID: primary
+  task: "List all pods in the cluster"
+  model:
+    name: gpt-4o
+    provider: openai
+  timeout: "5m"

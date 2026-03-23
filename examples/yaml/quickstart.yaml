@@ -1,0 +1,63 @@
+---
+# Quick Start Example - Copy-paste this entire file
+# This creates a complete working setup: PersonaPack + AgentRun
+# 
+# Prerequisites:
+#   1. Install Sympozium: sympozium install
+#   2. Create an OpenAI secret: kubectl create secret generic my-openai-key --from-literal=key=sk-...
+#   3. Ensure default policies exist: kubectl get sympoziumpolicy
+#
+# Apply this file:
+#   kubectl apply -f quickstart.yaml
+#
+# Then watch the agent run:
+#   kubectl get agentrun -l sympozium.ai/personapack=quickstart-demo -w
+---
+# Step 1: Create a PersonaPack with one simple persona
+apiVersion: sympozium.ai/v1alpha1
+kind: PersonaPack
+metadata:
+  name: quickstart-demo
+  namespace: default
+spec:
+  description: "Quick start example - creates a simple agent"
+  category: custom
+  version: "1.0.0"
+  authRefs:
+    - secret: my-openai-key
+  policyRef: default-policy
+  personas:
+    - name: assistant
+      displayName: "Quick Start Assistant"
+      systemPrompt: |
+        You are a helpful assistant. Help users understand their cluster
+        and answer questions about their resources.
+      skills:
+        - k8s-ops
+      schedule:
+        type: heartbeat
+        interval: "1h"
+        task: "Check in and report cluster status."
+      memory:
+        enabled: true
+        seeds:
+          - "Be concise and helpful"
+---
+# Step 2: Create an AgentRun to trigger immediate execution
+apiVersion: sympozium.ai/v1alpha1
+kind: AgentRun
+metadata:
+  name: quickstart-run
+  namespace: default
+  labels:
+    sympozium.ai/personapack: quickstart-demo
+spec:
+  instanceRef: assistant
+  agentID: primary
+  task: |
+    Tell me what namespace you're running in and list all pods.
+    Keep your response under 3 sentences.
+  model:
+    name: gpt-4o
+    provider: openai
+  timeout: "5m"

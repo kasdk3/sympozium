@@ -122,6 +122,7 @@ jobs:
           - skill-sre-observability
           - skill-github-gitops
           - skill-llmfit
+          - mcp-bridge
           - node-probe
           - mcp-bridge
     steps:

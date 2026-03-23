@@ -518,6 +518,9 @@ func (s *Server) createInstance(w http.ResponseWriter, r *http.Request) {
 
 	if req.BaseURL != "" {
 		inst.Spec.Agents.Default.BaseURL = req.BaseURL
+	} else {
+		// Apply default baseURL for keyless local providers (fixes #39).
+		inst.Spec.Agents.Default.BaseURL = defaultProviderBaseURL(req.Provider)
 	}
 	if len(req.NodeSelector) > 0 {
 		inst.Spec.Agents.Default.NodeSelector = req.NodeSelector
@@ -1243,23 +1246,24 @@ func (s *Server) getPersonaPack(w http.ResponseWriter, r *http.Request) {
 
 // PatchPersonaPackRequest represents a partial update to a PersonaPack.
 type PatchPersonaPackRequest struct {
-	Enabled            *bool                        `json:"enabled,omitempty"`
-	Provider           string                       `json:"provider,omitempty"`
-	SecretName         string                       `json:"secretName,omitempty"`
-	APIKey             string                       `json:"apiKey,omitempty"`
-	AWSRegion          string                       `json:"awsRegion,omitempty"`
-	AWSAccessKeyID     string                       `json:"awsAccessKeyId,omitempty"`
-	AWSSecretAccessKey string                       `json:"awsSecretAccessKey,omitempty"`
-	AWSSessionToken    string                       `json:"awsSessionToken,omitempty"`
-	Model              string                       `json:"model,omitempty"`
-	BaseURL            string                       `json:"baseURL,omitempty"`
-	Channels           []string                     `json:"channels,omitempty"`
-	ChannelConfigs     map[string]string            `json:"channelConfigs,omitempty"`
-	PolicyRef          string                       `json:"policyRef,omitempty"`
-	HeartbeatInterval  string                       `json:"heartbeatInterval,omitempty"`
-	SkillParams        map[string]map[string]string `json:"skillParams,omitempty"`
-	GithubToken        string                       `json:"githubToken,omitempty"`
-	Personas           []PersonaPatchSpec           `json:"personas,omitempty"`
+	Enabled              *bool                                              `json:"enabled,omitempty"`
+	Provider             string                                             `json:"provider,omitempty"`
+	SecretName           string                                             `json:"secretName,omitempty"`
+	APIKey               string                                             `json:"apiKey,omitempty"`
+	AWSRegion            string                                             `json:"awsRegion,omitempty"`
+	AWSAccessKeyID       string                                             `json:"awsAccessKeyId,omitempty"`
+	AWSSecretAccessKey   string                                             `json:"awsSecretAccessKey,omitempty"`
+	AWSSessionToken      string                                             `json:"awsSessionToken,omitempty"`
+	Model                string                                             `json:"model,omitempty"`
+	BaseURL              string                                             `json:"baseURL,omitempty"`
+	Channels             []string                                           `json:"channels,omitempty"`
+	ChannelConfigs       map[string]string                                  `json:"channelConfigs,omitempty"`
+	PolicyRef            string                                             `json:"policyRef,omitempty"`
+	HeartbeatInterval    string                                             `json:"heartbeatInterval,omitempty"`
+	SkillParams          map[string]map[string]string                       `json:"skillParams,omitempty"`
+	GithubToken          string                                             `json:"githubToken,omitempty"`
+	Personas             []PersonaPatchSpec                                 `json:"personas,omitempty"`
+	ChannelAccessControl map[string]*sympoziumv1alpha1.ChannelAccessControl `json:"channelAccessControl,omitempty"`
 }
 
 // PersonaPatchSpec allows partial updates to individual personas by name.
@@ -1384,6 +1388,10 @@ func (s *Server) patchPersonaPack(w http.ResponseWriter, r *http.Request) {
 
 	if req.BaseURL != "" {
 		pp.Spec.BaseURL = req.BaseURL
+	} else if pp.Spec.BaseURL == "" && req.Provider != "" {
+		// Apply default baseURL for keyless local providers so the
+		// controller can reach the inference server (fixes #39).
+		pp.Spec.BaseURL = defaultProviderBaseURL(req.Provider)
 	}
 
 	if len(req.Channels) > 0 {
@@ -1394,6 +1402,10 @@ func (s *Server) patchPersonaPack(w http.ResponseWriter, r *http.Request) {
 
 	if req.ChannelConfigs != nil {
 		pp.Spec.ChannelConfigs = req.ChannelConfigs
+	}
+
+	if len(req.ChannelAccessControl) > 0 {
+		pp.Spec.ChannelAccessControl = req.ChannelAccessControl
 	}
 
 	if req.PolicyRef != "" {
@@ -1570,6 +1582,19 @@ func defaultProviderSecretName(resourceName, provider string) string {
 		return resourceName + "-credentials"
 	}
 	return fmt.Sprintf("%s-%s-key", resourceName, provider)
+}
+
+// defaultProviderBaseURL returns the conventional default base URL for
+// keyless local providers (ollama, lm-studio). Returns "" for cloud providers.
+func defaultProviderBaseURL(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "ollama":
+		return "http://ollama.default.svc:11434/v1"
+	case "lm-studio":
+		return "http://localhost:1234/v1"
+	default:
+		return ""
+	}
 }
 
 func (s *Server) listNamespaces(w http.ResponseWriter, r *http.Request) {
