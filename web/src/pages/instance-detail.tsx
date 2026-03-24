@@ -1,9 +1,15 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
-import { useInstance } from "@/hooks/use-api";
+import { useInstance, useCapabilities } from "@/hooks/use-api";
 import { StatusBadge } from "@/components/status-badge";
 import { GithubAuthDialog } from "@/components/github-auth-dialog";
-import { api, type SkillRef, type SympoziumInstance } from "@/lib/api";
+import {
+  api,
+  type SkillRef,
+  type SympoziumInstance,
+  type AgentSandboxInstanceSpec,
+  type CapabilityStatus,
+} from "@/lib/api";
 import {
   Card,
   CardHeader,
@@ -14,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, AlertTriangle } from "lucide-react";
 import { formatAge } from "@/lib/utils";
 
 export function InstanceDetailPage() {
@@ -27,6 +33,7 @@ export function InstanceDetailPage() {
   );
   const connectGithub = searchParams.get("connect") === "github";
   const { data: inst, isLoading } = useInstance(name || "");
+  const { data: capabilities } = useCapabilities();
 
   useEffect(() => {
     if (paramTab && allowedTabs.has(paramTab)) {
@@ -126,6 +133,11 @@ export function InstanceDetailPage() {
                 </CardContent>
               </Card>
             )}
+
+            <AgentSandboxCard
+              sandbox={inst.spec.agents?.default?.agentSandbox}
+              capability={capabilities?.agentSandbox}
+            />
           </div>
         </TabsContent>
 
@@ -208,6 +220,58 @@ export function InstanceDetailPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function AgentSandboxCard({
+  sandbox,
+  capability,
+}: {
+  sandbox?: AgentSandboxInstanceSpec;
+  capability?: CapabilityStatus;
+}) {
+  const crdInstalled = capability?.available ?? false;
+  const enabled = crdInstalled && sandbox?.enabled === true;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Agent Sandbox</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!crdInstalled ? (
+          <div className="flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
+            <AlertTriangle className="h-4 w-4 mt-0.5 text-yellow-600 shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium text-yellow-600">Unavailable</p>
+              <p className="text-muted-foreground">
+                {capability?.reason ||
+                  "Agent Sandbox CRDs are not installed in the cluster."}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <Row label="Enabled" value={enabled ? "Yes" : "No"} />
+            {enabled && (
+              <>
+                <Row label="Runtime Class" value={sandbox?.runtimeClass || "default"} />
+                {sandbox?.warmPool && (
+                  <>
+                    <Separator />
+                    <p className="text-xs font-medium text-muted-foreground">Warm Pool</p>
+                    <Row label="Size" value={String(sandbox.warmPool.size ?? 2)} />
+                    {sandbox.warmPool.runtimeClass && (
+                      <Row label="Runtime Class" value={sandbox.warmPool.runtimeClass} />
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

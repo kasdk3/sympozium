@@ -37,11 +37,21 @@ export interface ChannelSpec {
   configRef?: SecretRef;
 }
 
+export interface AgentSandboxInstanceSpec {
+  enabled: boolean;
+  runtimeClass?: string;
+  warmPool?: {
+    size?: number;
+    runtimeClass?: string;
+  };
+}
+
 export interface AgentConfig {
   model: string;
   baseURL?: string;
   thinking?: string;
   nodeSelector?: Record<string, string>;
+  agentSandbox?: AgentSandboxInstanceSpec;
 }
 
 export interface AgentsSpec {
@@ -514,6 +524,17 @@ export interface ProviderModelsResponse {
   source: string;
 }
 
+// ── Capabilities ─────────────────────────────────────────────────────────────
+
+export interface CapabilityStatus {
+  available: boolean;
+  reason?: string;
+}
+
+export interface CapabilitiesResponse {
+  agentSandbox: CapabilityStatus;
+}
+
 // ── API client ───────────────────────────────────────────────────────────────
 
 /** Typed error so callers can inspect the HTTP status code. */
@@ -639,6 +660,7 @@ export const api = {
       channels?: ChannelSpec[];
       heartbeatInterval?: string;
       nodeSelector?: Record<string, string>;
+      agentSandbox?: { enabled: boolean; runtimeClass?: string };
     }) =>
       apiFetch<SympoziumInstance>("/api/v1/instances", {
         method: "POST",
@@ -720,6 +742,7 @@ export const api = {
           systemPrompt?: string;
           skills?: string[];
         }>;
+        agentSandbox?: { enabled: boolean; runtimeClass?: string };
       }
     ) =>
       apiFetch<PersonaPack>(`/api/v1/personapacks/${name}`, {
@@ -783,6 +806,10 @@ export const api = {
 
   cluster: {
     info: () => apiFetch<ClusterInfoResponse>("/api/v1/cluster"),
+  },
+
+  capabilities: {
+    get: () => apiFetch<CapabilitiesResponse>("/api/v1/capabilities"),
   },
 
   observability: {

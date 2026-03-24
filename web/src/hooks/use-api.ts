@@ -15,6 +15,16 @@ function toastError(err: Error) {
   );
 }
 
+// ── Capabilities ────────────────────────────────────────────────────────────
+
+export function useCapabilities() {
+  return useQuery({
+    queryKey: ["capabilities"],
+    queryFn: api.capabilities.get,
+    staleTime: 60_000,
+  });
+}
+
 // ── Namespaces ───────────────────────────────────────────────────────────────
 
 export function useNamespaces() {
@@ -233,6 +243,7 @@ export function useActivatePersonaPack() {
         systemPrompt?: string;
         skills?: string[];
       }>;
+      agentSandbox?: { enabled: boolean; runtimeClass?: string };
     }) => api.personaPacks.patch(name, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["personaPacks"] });

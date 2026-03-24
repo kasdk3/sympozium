@@ -143,7 +143,7 @@ spec:
       thinking: high
       sandbox:
         enabled: true
-        image: ghcr.io/openclaw/sandbox:latest
+        image: ghcr.io/sympozium-ai/sympozium/sandbox:latest
         resources:
           requests: { cpu: 250m, memory: 512Mi }
           limits: { cpu: "1", memory: 1Gi }
@@ -225,7 +225,7 @@ spec:
 
   sandbox:
     enabled: true
-    image: ghcr.io/openclaw/sandbox:latest
+    image: ghcr.io/sympozium-ai/sympozium/sandbox:latest
     securityContext:
       readOnlyRootFilesystem: true
       runAsNonRoot: true
@@ -427,7 +427,7 @@ spec:
         ...
   # Container image requirements (bins this skill pack needs)
   runtimeRequirements:
-    image: ghcr.io/openclaw/sandbox-common:latest
+    image: ghcr.io/sympozium-ai/sympozium/sandbox:latest
   # Optional sidecar container for runtime tools + auto-RBAC
   sidecar:
     image: ghcr.io/kasdk3/sympozium/skill-k8s-ops:latest
@@ -686,7 +686,7 @@ spec:
 
         # Optional sidecar: sandbox exec (if exec tools are enabled)
         - name: sandbox
-          image: ghcr.io/openclaw/sandbox:latest
+          image: ghcr.io/sympozium-ai/sympozium/sandbox:latest
           securityContext:
             readOnlyRootFilesystem: true
             capabilities:

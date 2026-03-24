@@ -96,6 +96,9 @@ export function PersonasPage() {
         heartbeatInterval: result.heartbeatInterval || undefined,
         skillParams,
         githubToken: result.githubToken || undefined,
+        agentSandbox: result.agentSandboxEnabled
+          ? { enabled: true, runtimeClass: result.agentSandboxRuntimeClass || "gvisor" }
+          : undefined,
       },
       {
         onSuccess: () => {

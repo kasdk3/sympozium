@@ -152,8 +152,9 @@ func (s *Server) buildMux(frontendFS fs.FS, token string) http.Handler {
 	mux.HandleFunc("GET /api/v1/providers/models", s.proxyProviderModels)
 	mux.HandleFunc("POST /api/v1/providers/bedrock/models", s.listBedrockModels)
 
-	// Cluster info
+	// Cluster info & capabilities
 	mux.HandleFunc("GET /api/v1/cluster", s.getClusterInfo)
+	mux.HandleFunc("GET /api/v1/capabilities", s.getCapabilities)
 
 	// Namespace listing
 	mux.HandleFunc("GET /api/v1/namespaces", s.listNamespaces)
@@ -458,21 +459,22 @@ func (s *Server) getWebEndpointStatus(w http.ResponseWriter, r *http.Request) {
 
 // CreateInstanceRequest is the request body for creating a new SympoziumInstance.
 type CreateInstanceRequest struct {
-	Name               string                          `json:"name"`
-	Provider           string                          `json:"provider"`
-	Model              string                          `json:"model"`
-	BaseURL            string                          `json:"baseURL,omitempty"`
-	SecretName         string                          `json:"secretName,omitempty"`
-	APIKey             string                          `json:"apiKey,omitempty"`
-	AWSRegion          string                          `json:"awsRegion,omitempty"`
-	AWSAccessKeyID     string                          `json:"awsAccessKeyId,omitempty"`
-	AWSSecretAccessKey string                          `json:"awsSecretAccessKey,omitempty"`
-	AWSSessionToken    string                          `json:"awsSessionToken,omitempty"`
-	PolicyRef          string                          `json:"policyRef,omitempty"`
-	Skills             []sympoziumv1alpha1.SkillRef    `json:"skills,omitempty"`
-	Channels           []sympoziumv1alpha1.ChannelSpec `json:"channels,omitempty"`
-	HeartbeatInterval  string                          `json:"heartbeatInterval,omitempty"`
-	NodeSelector       map[string]string               `json:"nodeSelector,omitempty"`
+	Name               string                                      `json:"name"`
+	Provider           string                                      `json:"provider"`
+	Model              string                                      `json:"model"`
+	BaseURL            string                                      `json:"baseURL,omitempty"`
+	SecretName         string                                      `json:"secretName,omitempty"`
+	APIKey             string                                      `json:"apiKey,omitempty"`
+	AWSRegion          string                                      `json:"awsRegion,omitempty"`
+	AWSAccessKeyID     string                                      `json:"awsAccessKeyId,omitempty"`
+	AWSSecretAccessKey string                                      `json:"awsSecretAccessKey,omitempty"`
+	AWSSessionToken    string                                      `json:"awsSessionToken,omitempty"`
+	PolicyRef          string                                      `json:"policyRef,omitempty"`
+	Skills             []sympoziumv1alpha1.SkillRef                `json:"skills,omitempty"`
+	Channels           []sympoziumv1alpha1.ChannelSpec             `json:"channels,omitempty"`
+	HeartbeatInterval  string                                      `json:"heartbeatInterval,omitempty"`
+	NodeSelector       map[string]string                           `json:"nodeSelector,omitempty"`
+	AgentSandbox       *sympoziumv1alpha1.AgentSandboxInstanceSpec `json:"agentSandbox,omitempty"`
 }
 
 func (s *Server) createInstance(w http.ResponseWriter, r *http.Request) {
@@ -522,6 +524,9 @@ func (s *Server) createInstance(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.NodeSelector) > 0 {
 		inst.Spec.Agents.Default.NodeSelector = req.NodeSelector
+	}
+	if req.AgentSandbox != nil {
+		inst.Spec.Agents.Default.AgentSandbox = req.AgentSandbox
 	}
 
 	// Bedrock: create a multi-key secret with AWS credentials.
@@ -1262,6 +1267,7 @@ type PatchPersonaPackRequest struct {
 	GithubToken          string                                             `json:"githubToken,omitempty"`
 	Personas             []PersonaPatchSpec                                 `json:"personas,omitempty"`
 	ChannelAccessControl map[string]*sympoziumv1alpha1.ChannelAccessControl `json:"channelAccessControl,omitempty"`
+	AgentSandbox         *sympoziumv1alpha1.AgentSandboxInstanceSpec        `json:"agentSandbox,omitempty"`
 }
 
 // PersonaPatchSpec allows partial updates to individual personas by name.
@@ -1441,6 +1447,10 @@ func (s *Server) patchPersonaPack(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
+	}
+
+	if req.AgentSandbox != nil {
+		pp.Spec.AgentSandbox = req.AgentSandbox
 	}
 
 	// Store GitHub token as a cluster secret when provided inline.
@@ -2364,6 +2374,66 @@ func (s *Server) getClusterInfo(w http.ResponseWriter, r *http.Request) {
 	if s.kube != nil {
 		if info, err := s.kube.Discovery().ServerVersion(); err == nil {
 			resp.Version = info.GitVersion
+		}
+	}
+
+	writeJSON(w, resp)
+}
+
+// ── Capabilities endpoint ────────────────────────────────────────────────────
+
+// CapabilityStatus describes whether a feature is available in the cluster.
+type CapabilityStatus struct {
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+// CapabilitiesResponse lists optional features and whether their prerequisites are met.
+type CapabilitiesResponse struct {
+	AgentSandbox CapabilityStatus `json:"agentSandbox"`
+}
+
+func (s *Server) getCapabilities(w http.ResponseWriter, r *http.Request) {
+	resp := CapabilitiesResponse{}
+
+	// Check if Agent Sandbox CRDs (agents.x-k8s.io) are installed.
+	// We use ServerResourcesForGroupVersion (targeted query) instead of
+	// ServerGroupsAndResources (full scan) because the latter suffers from
+	// partial discovery failures: when ANY unrelated API group is unhealthy
+	// (e.g. metrics-server), it returns a non-nil error with partial results
+	// that silently omit the failed groups. This caused false negatives where
+	// installed CRDs were reported as missing.
+	// WARNING: This uses the v1alpha1 API group. As the upstream project
+	// (kubernetes-sigs/agent-sandbox) graduates, update this string AND the
+	// GVRs in internal/controller/agentrun_sandbox.go (see the full list there).
+	if s.kube != nil {
+		resources, err := s.kube.Discovery().ServerResourcesForGroupVersion("agents.x-k8s.io/v1alpha1")
+		if err == nil {
+			found := false
+			for _, r := range resources.APIResources {
+				if r.Name == "sandboxes" {
+					found = true
+					break
+				}
+			}
+			if found {
+				resp.AgentSandbox = CapabilityStatus{Available: true}
+			} else {
+				resp.AgentSandbox = CapabilityStatus{
+					Available: false,
+					Reason:    "Agent Sandbox CRDs (agents.x-k8s.io) are not installed. Install kubernetes-sigs/agent-sandbox to enable this feature.",
+				}
+			}
+		} else {
+			resp.AgentSandbox = CapabilityStatus{
+				Available: false,
+				Reason:    "Agent Sandbox CRDs (agents.x-k8s.io) are not installed. Install kubernetes-sigs/agent-sandbox to enable this feature.",
+			}
+		}
+	} else {
+		resp.AgentSandbox = CapabilityStatus{
+			Available: false,
+			Reason:    "Kubernetes client not available",
 		}
 	}
 

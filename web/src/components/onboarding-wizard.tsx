@@ -37,6 +37,7 @@ import {
   Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCapabilities } from "@/hooks/use-api";
 
 // ── Shared constants ─────────────────────────────────────────────────────────
 
@@ -100,6 +101,10 @@ export interface WizardResult {
   githubTeamInstructions?: string;
   /** Node selector for pinning agent pods to specific nodes */
   nodeSelector?: Record<string, string>;
+  /** Enable Agent Sandbox (kernel-level isolation via gVisor/Kata) */
+  agentSandboxEnabled?: boolean;
+  /** Runtime class for Agent Sandbox (e.g., "gvisor", "kata") */
+  agentSandboxRuntimeClass?: string;
 }
 
 interface OnboardingWizardProps {
@@ -311,6 +316,8 @@ export function OnboardingWizard({
     githubToken: defaults?.githubToken || "",
     githubTeamInstructions: defaults?.githubTeamInstructions || "",
     nodeSelector: defaults?.nodeSelector,
+    agentSandboxEnabled: defaults?.agentSandboxEnabled ?? false,
+    agentSandboxRuntimeClass: defaults?.agentSandboxRuntimeClass || "gvisor",
     awsRegion: defaults?.awsRegion || "",
     awsAccessKeyId: defaults?.awsAccessKeyId || "",
     awsSecretAccessKey: defaults?.awsSecretAccessKey || "",
@@ -318,6 +325,7 @@ export function OnboardingWizard({
   });
   const [inferenceMode, setInferenceMode] = useState<"workload" | "node">("workload");
   const [channelActionIdx, setChannelActionIdx] = useState(0);
+  const { data: capabilities } = useCapabilities();
 
   const isLocalProvider = form.provider === "ollama" || form.provider === "lm-studio" || form.provider === "custom";
   const { data: providerNodes, isLoading: nodesLoading } = useProviderNodes(
@@ -635,7 +643,7 @@ export function OnboardingWizard({
                               <div className="font-mono truncate">{node.nodeName}</div>
                               <div className="text-[10px] text-muted-foreground">
                                 {node.nodeIP} &middot; {nodeProviders.join(", ")}
-                                {nodeModels.length > 0 && ` &middot; ${nodeModels.length} model${nodeModels.length === 1 ? "" : "s"}`}
+                                {nodeModels.length > 0 && ` · ${nodeModels.length} model${nodeModels.length === 1 ? "" : "s"}`}
                               </div>
                             </div>
                             {isSelected && <Check className="h-3 w-3 shrink-0 mt-0.5 ml-auto" />}
@@ -898,6 +906,66 @@ export function OnboardingWizard({
                 </div>
               </div>
             )}
+
+            {/* Agent Sandbox toggle */}
+            <div className={cn(
+              "rounded-md border p-3 space-y-2",
+              capabilities?.agentSandbox?.available
+                ? form.agentSandboxEnabled
+                  ? "border-blue-500/20 bg-blue-500/5"
+                  : "border-border/50"
+                : "border-border/30 opacity-60"
+            )}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium">Agent Sandbox</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Kernel-level isolation via gVisor/Kata
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!capabilities?.agentSandbox?.available}
+                  onClick={() => setForm({ ...form, agentSandboxEnabled: !form.agentSandboxEnabled })}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    form.agentSandboxEnabled && capabilities?.agentSandbox?.available
+                      ? "bg-blue-500"
+                      : "bg-muted",
+                    !capabilities?.agentSandbox?.available && "cursor-not-allowed"
+                  )}
+                >
+                  <span className={cn(
+                    "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform",
+                    form.agentSandboxEnabled && capabilities?.agentSandbox?.available
+                      ? "translate-x-4"
+                      : "translate-x-0"
+                  )} />
+                </button>
+              </div>
+              {!capabilities?.agentSandbox?.available && (
+                <p className="text-[10px] text-yellow-500">
+                  {capabilities?.agentSandbox?.reason || "Agent Sandbox CRDs not installed"}
+                </p>
+              )}
+              {form.agentSandboxEnabled && capabilities?.agentSandbox?.available && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Runtime Class</Label>
+                  <Select
+                    value={form.agentSandboxRuntimeClass || "gvisor"}
+                    onValueChange={(v) => setForm({ ...form, agentSandboxRuntimeClass: v })}
+                  >
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gvisor">gVisor</SelectItem>
+                      <SelectItem value="kata">Kata Containers</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </div>
           </ScrollArea>
         )}
@@ -1064,6 +1132,12 @@ export function OnboardingWizard({
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Team Instructions</span>
                   <span className="text-xs text-emerald-400">provided</span>
+                </div>
+              )}
+              {form.agentSandboxEnabled && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Agent Sandbox</span>
+                  <span className="text-xs">{form.agentSandboxRuntimeClass || "gvisor"}</span>
                 </div>
               )}
             </div>
