@@ -243,7 +243,7 @@ spec:
     authSecretRef: my-openai-key
   sandbox:
     enabled: true
-    image: ghcr.io/sympozium-ai/sympozium/sandbox:latest
+    image: ghcr.io/kasdk3/sympozium/sandbox:latest
   timeout: "5m"
 ```
 
