@@ -538,6 +538,7 @@ func (r *SympoziumInstanceReconciler) reconcileMemoryDeployment(ctx context.Cont
 	}
 
 	replicas := int32(1)
+	fsGroup := int64(1000)
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deployName,
@@ -624,7 +625,7 @@ func (r *SympoziumInstanceReconciler) reconcileMemoryDeployment(ctx context.Cont
 						},
 					},
 					SecurityContext: &corev1.PodSecurityContext{
-						fsGroup: pointerToInt64(1000),
+						fSGroup: &fsGroup,
 					},
 				},
 			},
