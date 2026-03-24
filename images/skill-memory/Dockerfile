@@ -12,7 +12,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -mod=mod -ldflags="-s -w" -o /memory-server ./cmd/memory-server
 
-FROM gcr.io/distroless/static:latest
+FROM gcr.io/distroless/static:nonroot
 COPY --from=builder /memory-server /memory-server
 USER 65532:65532
 ENTRYPOINT ["/memory-server"]

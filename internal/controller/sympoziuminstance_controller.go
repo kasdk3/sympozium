@@ -623,6 +623,9 @@ func (r *SympoziumInstanceReconciler) reconcileMemoryDeployment(ctx context.Cont
 							},
 						},
 					},
+					SecurityContext: &corev1.PodSecurityContext{
+						fsGroup: pointerToInt64(1000),
+					},
 				},
 			},
 		},
