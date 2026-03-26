@@ -176,6 +176,7 @@ func main() {
 		os.Getenv("OPENAI_API_KEY"),
 		os.Getenv("ANTHROPIC_API_KEY"),
 		os.Getenv("AZURE_OPENAI_API_KEY"),
+		os.Getenv("PROVIDER_API_KEY"),
 	)
 
 	log.Printf("provider=%s model=%s baseURL=%s tools=%v task=%q",
