@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -56,6 +57,8 @@ type SpawnRequest struct {
 
 	// Skills to mount.
 	Skills []sympoziumv1alpha1.SkillRef `json:"skills,omitempty"`
+
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // SpawnResult is the result of a spawn operation.
@@ -110,11 +113,12 @@ func (s *Spawner) Spawn(ctx context.Context, req SpawnRequest) (*SpawnResult, er
 				SessionKey: req.ParentSessionKey,
 				SpawnDepth: req.CurrentDepth + 1,
 			},
-			Task:         req.Task,
-			SystemPrompt: req.SystemPrompt,
-			Model:        req.Model,
-			Skills:       req.Skills,
-			Cleanup:      "delete",
+			Task:             req.Task,
+			SystemPrompt:     req.SystemPrompt,
+			Model:            req.Model,
+			Skills:           req.Skills,
+			Cleanup:          "delete",
+			ImagePullSecrets: req.ImagePullSecrets,
 		},
 	}
 

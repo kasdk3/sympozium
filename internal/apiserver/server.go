@@ -824,7 +824,8 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 				AuthSecretRef: authSecret,
 				NodeSelector:  inst.Spec.Agents.Default.NodeSelector,
 			},
-			Skills: inst.Spec.Skills,
+			Skills:           inst.Spec.Skills,
+			ImagePullSecrets: inst.Spec.ImagePullSecrets,
 		},
 	}
 

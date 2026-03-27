@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -68,6 +69,10 @@ type AgentRunSpec struct {
 	// +kubebuilder:validation:Enum=task;server
 	// +optional
 	Mode string `json:"mode,omitempty"`
+
+	// ImagePullSecrets are secrets to use when pulling container images.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // ParentRunRef links a sub-agent to its parent.

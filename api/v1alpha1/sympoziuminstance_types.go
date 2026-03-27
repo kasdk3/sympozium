@@ -48,6 +48,10 @@ type SympoziumInstanceSpec struct {
 	// When nil or Enabled is false, no web-proxy infrastructure is deployed.
 	// +optional
 	WebEndpoint *WebEndpointSpec `json:"webEndpoint,omitempty"`
+
+	// ImagePullSecrets are secrets to use when pulling container images.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // MCPServerRef references a remote MCP server for tool integration.

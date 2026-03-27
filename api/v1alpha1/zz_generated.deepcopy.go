@@ -5,6 +5,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -172,6 +173,11 @@ func (in *AgentRunSpec) DeepCopyInto(out *AgentRunSpec) {
 		in, out := &in.Timeout, &out.Timeout
 		*out = new(v1.Duration)
 		**out = **in
+	}
+	if in.ImagePullSecrets != nil {
+		in, out := &in.ImagePullSecrets, &out.ImagePullSecrets
+		*out = make([]corev1.LocalObjectReference, len(*in))
+		copy(*out, *in)
 	}
 }
 
@@ -1802,6 +1808,11 @@ func (in *SympoziumInstanceSpec) DeepCopyInto(out *SympoziumInstanceSpec) {
 		in, out := &in.WebEndpoint, &out.WebEndpoint
 		*out = new(WebEndpointSpec)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.ImagePullSecrets != nil {
+		in, out := &in.ImagePullSecrets, &out.ImagePullSecrets
+		*out = make([]corev1.LocalObjectReference, len(*in))
+		copy(*out, *in)
 	}
 }
 

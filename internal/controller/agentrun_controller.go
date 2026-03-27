@@ -807,6 +807,7 @@ func (r *AgentRunReconciler) reconcilePendingServer(ctx context.Context, log log
 				Spec: corev1.PodSpec{
 					RestartPolicy:      corev1.RestartPolicyAlways,
 					ServiceAccountName: "sympozium-agent",
+					ImagePullSecrets:   agentRun.Spec.ImagePullSecrets,
 					NodeSelector:       agentRun.Spec.Model.NodeSelector,
 					Containers: []corev1.Container{
 						{
@@ -1270,6 +1271,7 @@ func (r *AgentRunReconciler) buildJob(
 				Spec: corev1.PodSpec{
 					RestartPolicy:      corev1.RestartPolicyNever,
 					ServiceAccountName: "sympozium-agent",
+					ImagePullSecrets:   agentRun.Spec.ImagePullSecrets,
 					HostNetwork:        hostNetwork,
 					HostPID:            hostPID,
 					DNSPolicy:          dnsPolicy,
