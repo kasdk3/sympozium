@@ -2598,6 +2598,7 @@ func (s *Server) proxyProviderModels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	provider := r.URL.Query().Get("provider")
+	apiKey := r.URL.Query().Get("apiKey")
 
 	// Determine the models endpoint URL.
 	modelsURL := ""
@@ -2617,7 +2618,15 @@ func (s *Server) proxyProviderModels(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(modelsURL)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, modelsURL, nil)
+	if err != nil {
+		http.Error(w, "failed to build request: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		http.Error(w, "failed to reach provider: "+err.Error(), http.StatusBadGateway)
 		return
