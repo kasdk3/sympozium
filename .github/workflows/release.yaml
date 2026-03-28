@@ -3,6 +3,11 @@ name: Release CLI
 on:
   push:
     tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -11,6 +16,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io/sympozium-ai/sympozium
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   release-cli:
@@ -40,7 +46,7 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${RELEASE_TAG}"
           go build -ldflags="-s -w -X main.version=${VERSION}" \
             -o sympozium ./cmd/sympozium
 
@@ -53,6 +59,7 @@ jobs:
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             sympozium-*.tar.gz
             sympozium-*.sha256
@@ -64,7 +71,7 @@ jobs:
 
       - name: Stamp image tags with release version
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${RELEASE_TAG}"
           echo "Stamping image tags with ${TAG}..."
           find config/ -name '*.yaml' -exec \
             sed -i "s|ghcr.io/sympozium-ai/sympozium/\([^:]*\):latest|ghcr.io/sympozium-ai/sympozium/\1:${TAG}|g" {} +
@@ -88,6 +95,7 @@ jobs:
       - name: Upload manifests
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: sympozium-manifests.tar.gz
 
   release-images:
@@ -125,16 +133,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ matrix.image }}
-          tags: |
-            type=semver,pattern=v{{version}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+      - name: Compute image tags
+        id: tags
+        run: |
+          TAG="${RELEASE_TAG}"
+          VERSION="${TAG#v}"
+          MAJOR_MINOR="${VERSION%.*}"
+          IMAGE="${{ env.REGISTRY }}/${{ matrix.image }}"
+          TAGS="${IMAGE}:${TAG},${IMAGE}:${VERSION},${IMAGE}:${MAJOR_MINOR},${IMAGE}:latest"
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -144,9 +151,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           build-args: |
-            IMAGE_TAG=${{ github.ref_name }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+            IMAGE_TAG=${{ env.RELEASE_TAG }}
+          tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -175,7 +181,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add charts/
           git diff --cached --quiet && echo "No chart changes" && exit 0
-          git commit -m "chore: sync Helm chart CRDs for ${GITHUB_REF_NAME}"
+          git commit -m "chore: sync Helm chart CRDs for ${RELEASE_TAG}"
           git push origin main
 
   # ── Publish Helm chart to GitHub Release ─────────────────────────────────────
@@ -197,6 +203,7 @@ jobs:
       - name: Upload chart to release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: .helm-packages/sympozium-*.tgz
 
       - name: Trigger docs rebuild
@@ -219,7 +226,7 @@ jobs:
 
       - name: Download release assets and update formula
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ env.RELEASE_TAG }}
         run: |
           VERSION="${TAG#v}"
 
@@ -281,5 +288,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/sympozium.rb
           git diff --cached --quiet && echo "No changes" && exit 0
-          git commit -m "Update sympozium to ${GITHUB_REF_NAME}"
+          git commit -m "Update sympozium to ${RELEASE_TAG}"
           git push origin HEAD:main
