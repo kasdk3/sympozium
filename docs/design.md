@@ -639,7 +639,7 @@ spec:
       containers:
         # Main agent container — runs the LLM inference loop
         - name: agent
-          image: ghcr.io/sympozium-ai/sympozium/agent-runner:latest
+          image: ghcr.io/kasdk3/sympozium/agent-runner:latest
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
@@ -672,7 +672,7 @@ spec:
 
         # Sidecar: IPC bridge to control plane
         - name: ipc-bridge
-          image: ghcr.io/sympozium-ai/sympozium/ipc-bridge:latest
+          image: ghcr.io/kasdk3/sympozium/ipc-bridge:latest
           env:
             - name: AGENT_RUN_ID
               value: run-abc123
@@ -795,7 +795,7 @@ spec:
     spec:
       containers:
         - name: telegram
-          image: ghcr.io/sympozium-ai/sympozium/channel-telegram:latest
+          image: ghcr.io/kasdk3/sympozium/channel-telegram:latest
           env:
             - name: INSTANCE_NAME
               value: alice

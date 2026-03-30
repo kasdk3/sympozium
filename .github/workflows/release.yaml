@@ -220,7 +220,7 @@ jobs:
   #     - name: Checkout tap
   #       uses: actions/checkout@v4
   #       with:
-  #         repository: sympozium-ai/homebrew-sympozium
+  #         repository: kasdk3/homebrew-sympozium
   #         token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
   #         path: homebrew-tap
 
