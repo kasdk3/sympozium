@@ -88,7 +88,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-white/5 hover:text-foreground transition-colors">
             <BookOpen className="h-4 w-4" />
           </a>
-          <a href="https://github.com/sympozium-ai/sympozium" target="_blank" rel="noopener noreferrer" title="GitHub"
+          <a href="https://github.com/kasdk3/sympozium" target="_blank" rel="noopener noreferrer" title="GitHub"
             className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-white/5 hover:text-foreground transition-colors">
             <Github className="h-4 w-4" />
           </a>
@@ -115,7 +115,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             Star on GitHub
           </a>
           <a
-            href="https://github.com/sympozium-ai/sympozium/blob/main/CONTRIBUTING.md"
+            href="https://github.com/kasdk3/sympozium/blob/main/CONTRIBUTING.md"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-white/5 hover:text-foreground transition-colors"
