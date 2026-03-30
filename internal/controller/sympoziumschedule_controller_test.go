@@ -216,6 +216,9 @@ func TestSympoziumScheduleReconcile_SkipsWhenServingRunExists(t *testing.T) {
 				Model:         "gpt-4o",
 				AuthSecretRef: "inst-serving-openai-key",
 			},
+			ImagePullSecrets: []corev1.LocalObjectReference{
+				{Name: "inst-serving-secret"},
+			},
 		},
 		Status: sympoziumv1alpha1.AgentRunStatus{
 			Phase: sympoziumv1alpha1.AgentRunPhaseServing,

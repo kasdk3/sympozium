@@ -248,8 +248,9 @@ func (p *Proxy) executeAgentTask(ctx context.Context, task string, session *mcpS
 				BaseURL:       inst.Spec.Agents.Default.BaseURL,
 				AuthSecretRef: authSecret,
 			},
-			Skills:  inst.Spec.Skills,
-			Timeout: &metav1.Duration{Duration: 10 * time.Minute},
+			Skills:           inst.Spec.Skills,
+			Timeout:          &metav1.Duration{Duration: 10 * time.Minute},
+			ImagePullSecrets: inst.Spec.ImagePullSecrets,
 		},
 	}
 

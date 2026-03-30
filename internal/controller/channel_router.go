@@ -205,8 +205,9 @@ func (cr *ChannelRouter) handleInbound(ctx context.Context, event *eventbus.Even
 				AuthSecretRef: authSecret,
 				NodeSelector:  inst.Spec.Agents.Default.NodeSelector,
 			},
-			Skills:  inst.Spec.Skills,
-			Timeout: &metav1.Duration{Duration: 10 * time.Minute},
+			Skills:           inst.Spec.Skills,
+			Timeout:          &metav1.Duration{Duration: 10 * time.Minute},
+			ImagePullSecrets: inst.Spec.ImagePullSecrets,
 		},
 	}
 

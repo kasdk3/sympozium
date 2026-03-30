@@ -184,6 +184,7 @@ func (r *SympoziumScheduleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 				Provider: resolveProvider(instance),
 				Model:    instance.Spec.Agents.Default.Model,
 			},
+			ImagePullSecrets: instance.Spec.ImagePullSecrets,
 		},
 	}
 

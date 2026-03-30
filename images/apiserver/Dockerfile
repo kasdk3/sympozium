@@ -1,7 +1,7 @@
 # API Server with embedded Web UI
 
 # Stage 1: Build frontend
-FROM node:22-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
 WORKDIR /web
 COPY web/package.json web/package-lock.json* ./
 RUN npm ci --ignore-scripts

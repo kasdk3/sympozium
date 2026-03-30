@@ -63,8 +63,8 @@ async function fetchAnthropicModels(apiKey: string): Promise<string[]> {
   return (data.data as { id: string }[]).map((m) => m.id).sort();
 }
 
-async function fetchProviderModelsViaProxy(baseURL: string): Promise<string[]> {
-  const res = await api.providers.models(baseURL);
+async function fetchProviderModelsViaProxy(baseURL: string, apiKey?: string): Promise<string[]> {
+  const res = await api.providers.models(baseURL, apiKey);
   return res.models;
 }
 
@@ -113,7 +113,7 @@ export function useModelList(
   const query = useQuery<string[]>({
     queryKey: ["provider-models", provider, apiKey, baseURL, bedrockCredentials?.region, bedrockCredentials?.accessKeyId],
     queryFn: async () => {
-      if (canFetchLocal) return fetchProviderModelsViaProxy(baseURL!);
+      if (canFetchLocal) return fetchProviderModelsViaProxy(baseURL!, apiKey || undefined);
       if (canFetchBedrock) return fetchBedrockModels(bedrockCredentials!);
       if (provider === "openai" && apiKey) return fetchOpenAIModels(apiKey);
       if (provider === "anthropic" && apiKey) return fetchAnthropicModels(apiKey);
