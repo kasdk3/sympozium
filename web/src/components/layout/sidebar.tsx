@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -152,4 +151,3 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
     </aside>
   );
 }
->>>>>>> upstream/main
