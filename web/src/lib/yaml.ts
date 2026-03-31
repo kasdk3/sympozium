@@ -1,6 +1,6 @@
 // Minimal YAML serializer for Kubernetes resource manifests.
 
-type YamlValue =
+export type YamlValue =
   | string
   | number
   | boolean

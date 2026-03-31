@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { FileCode, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toYaml } from "@/lib/yaml";
+import { toYaml, type YamlValue } from "@/lib/yaml";
 import type { WizardResult } from "@/components/onboarding-wizard";
 import type { SympoziumInstance, PersonaPack } from "@/lib/api";
 
@@ -19,7 +19,7 @@ export function instanceYamlFromWizard(result: WizardResult): string {
   const skills = result.skills
     .filter((s) => s !== "memory")
     .map((s) => {
-      const ref: Record<string, unknown> = { skillPackRef: s };
+      const ref: Record<string, YamlValue> = { skillPackRef: s };
       if (s === "web-endpoint") {
         const params: Record<string, string> = {};
         if (result.webEndpointRPM && result.webEndpointRPM !== "60")
@@ -35,14 +35,14 @@ export function instanceYamlFromWizard(result: WizardResult): string {
   skills.unshift({ skillPackRef: "memory" });
 
   const channels = result.channels.map((type) => {
-    const ch: Record<string, unknown> = { type };
+    const ch: Record<string, YamlValue> = { type };
     if (result.channelConfigs[type]) {
       ch.configRef = { secret: result.channelConfigs[type] };
     }
     return ch;
   });
 
-  const agentConfig: Record<string, unknown> = { model: result.model };
+  const agentConfig: Record<string, YamlValue> = { model: result.model };
   if (result.baseURL) agentConfig.baseURL = result.baseURL;
   if (result.nodeSelector && Object.keys(result.nodeSelector).length > 0)
     agentConfig.nodeSelector = result.nodeSelector;
@@ -57,7 +57,7 @@ export function instanceYamlFromWizard(result: WizardResult): string {
     authRefs.push({ provider: result.provider, secret: result.secretName });
   }
 
-  const obj: Record<string, unknown> = {
+  const obj: Record<string, YamlValue> = {
     apiVersion: "sympozium.ai/v1alpha1",
     kind: "SympoziumInstance",
     metadata: { name: result.name || "<instance-name>" },
@@ -95,7 +95,7 @@ export function personaPackYamlFromWizard(
     skillParams["github-gitops"] = { repo: result.githubRepo };
   }
 
-  const spec: Record<string, unknown> = {
+  const spec: Record<string, YamlValue> = {
     enabled: true,
     ...(authRefs.length > 0 ? { authRefs } : {}),
     ...(result.baseURL ? { baseURL: result.baseURL } : {}),
@@ -113,7 +113,7 @@ export function personaPackYamlFromWizard(
     personas: [`# ${personaCount ?? "?"} personas defined in pack (omitted for brevity)`],
   };
 
-  const obj: Record<string, unknown> = {
+  const obj: Record<string, YamlValue> = {
     apiVersion: "sympozium.ai/v1alpha1",
     kind: "PersonaPack",
     metadata: { name: packName },
@@ -125,7 +125,7 @@ export function personaPackYamlFromWizard(
 
 /** Build a SympoziumInstance YAML from an existing API resource. */
 export function instanceYamlFromResource(inst: SympoziumInstance): string {
-  const spec: Record<string, unknown> = {};
+  const spec: Record<string, YamlValue> = {};
 
   if (inst.spec.agents) spec.agents = inst.spec.agents;
   if (inst.spec.skills && inst.spec.skills.length > 0) spec.skills = inst.spec.skills;
@@ -134,7 +134,7 @@ export function instanceYamlFromResource(inst: SympoziumInstance): string {
   if (inst.spec.memory) spec.memory = inst.spec.memory;
   if (inst.spec.policyRef) spec.policyRef = inst.spec.policyRef;
 
-  const obj: Record<string, unknown> = {
+  const obj: Record<string, YamlValue> = {
     apiVersion: "sympozium.ai/v1alpha1",
     kind: "SympoziumInstance",
     metadata: {
@@ -151,7 +151,7 @@ export function instanceYamlFromResource(inst: SympoziumInstance): string {
 
 /** Build a PersonaPack YAML from an existing API resource. */
 export function personaPackYamlFromResource(pack: PersonaPack): string {
-  const spec: Record<string, unknown> = {};
+  const spec: Record<string, YamlValue> = {};
 
   if (pack.spec.enabled !== undefined) spec.enabled = pack.spec.enabled;
   if (pack.spec.description) spec.description = pack.spec.description;
@@ -166,7 +166,7 @@ export function personaPackYamlFromResource(pack: PersonaPack): string {
   if (pack.spec.taskOverride) spec.taskOverride = pack.spec.taskOverride;
 
   spec.personas = pack.spec.personas.map((p) => {
-    const persona: Record<string, unknown> = {
+    const persona: Record<string, YamlValue> = {
       name: p.name,
       systemPrompt: p.systemPrompt,
     };
@@ -182,7 +182,7 @@ export function personaPackYamlFromResource(pack: PersonaPack): string {
     return persona;
   });
 
-  const obj: Record<string, unknown> = {
+  const obj: Record<string, YamlValue> = {
     apiVersion: "sympozium.ai/v1alpha1",
     kind: "PersonaPack",
     metadata: {
