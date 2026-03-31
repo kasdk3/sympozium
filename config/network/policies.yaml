@@ -52,7 +52,7 @@ spec:
               kubernetes.io/metadata.name: sympozium-system
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: nats
+              app.kubernetes.io/component: nats
       ports:
         - protocol: TCP
           port: 4222
@@ -142,7 +142,7 @@ spec:
               kubernetes.io/metadata.name: sympozium-system
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: nats
+              app.kubernetes.io/component: nats
       ports:
         - protocol: TCP
           port: 4222
@@ -229,7 +229,7 @@ spec:
               kubernetes.io/metadata.name: sympozium-system
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: nats
+              app.kubernetes.io/component: nats
       ports:
         - protocol: TCP
           port: 4222

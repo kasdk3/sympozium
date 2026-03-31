@@ -147,11 +147,20 @@ func (r *AgentRunReconciler) reconcilePendingAgentSandbox(
 			Name:      memoryDeployName,
 		}, &memoryDeploy); err != nil {
 			age := time.Since(agentRun.CreationTimestamp.Time)
-			if age > 60*time.Second {
+			if age > 120*time.Second {
 				return ctrl.Result{}, r.failRun(ctx, agentRun,
 					fmt.Sprintf("memory server deployment %q not found after %s", memoryDeployName, age.Truncate(time.Second)))
 			}
-			log.Info("Memory server not ready yet, requeueing", "deployment", memoryDeployName)
+			log.Info("Memory server deployment not found, requeueing", "deployment", memoryDeployName, "age", age.Truncate(time.Second))
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+		if memoryDeploy.Status.ReadyReplicas < 1 {
+			age := time.Since(agentRun.CreationTimestamp.Time)
+			if age > 120*time.Second {
+				return ctrl.Result{}, r.failRun(ctx, agentRun,
+					fmt.Sprintf("memory server deployment %q has no ready replicas after %s", memoryDeployName, age.Truncate(time.Second)))
+			}
+			log.Info("Memory server not ready, requeueing", "deployment", memoryDeployName, "readyReplicas", memoryDeploy.Status.ReadyReplicas, "age", age.Truncate(time.Second))
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 	}

@@ -351,10 +351,11 @@ func (r *AgentRunReconciler) reconcilePending(ctx context.Context, log logr.Logg
 	sidecars = taskSidecars
 
 	// If the memory skill is attached, verify the memory server Deployment
-	// exists before creating the Job. The instance controller creates it
-	// asynchronously — if it hasn't reconciled yet, requeue rather than
-	// creating a pod that hangs on the wait-for-memory init container.
-	// Give up after 60s to avoid infinite requeue loops.
+	// exists AND has at least one ready replica before creating the Job.
+	// The instance controller creates it asynchronously — if it hasn't
+	// reconciled yet or the pod isn't ready, requeue rather than creating
+	// a pod that hangs on the wait-for-memory init container.
+	// Give up after 120s to avoid infinite requeue loops.
 	if agentRunHasMemorySkill(agentRun) {
 		memoryDeployName := fmt.Sprintf("%s-memory", agentRun.Spec.InstanceRef)
 		var memoryDeploy appsv1.Deployment
@@ -363,11 +364,20 @@ func (r *AgentRunReconciler) reconcilePending(ctx context.Context, log logr.Logg
 			Name:      memoryDeployName,
 		}, &memoryDeploy); err != nil {
 			age := time.Since(agentRun.CreationTimestamp.Time)
-			if age > 60*time.Second {
+			if age > 120*time.Second {
 				return ctrl.Result{}, r.failRun(ctx, agentRun,
 					fmt.Sprintf("memory server deployment %q not found after %s — ensure the instance has been reconciled", memoryDeployName, age.Truncate(time.Second)))
 			}
-			log.Info("Memory server not ready yet, requeueing", "deployment", memoryDeployName, "age", age.Truncate(time.Second))
+			log.Info("Memory server deployment not found, requeueing", "deployment", memoryDeployName, "age", age.Truncate(time.Second))
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+		if memoryDeploy.Status.ReadyReplicas < 1 {
+			age := time.Since(agentRun.CreationTimestamp.Time)
+			if age > 120*time.Second {
+				return ctrl.Result{}, r.failRun(ctx, agentRun,
+					fmt.Sprintf("memory server deployment %q has no ready replicas after %s", memoryDeployName, age.Truncate(time.Second)))
+			}
+			log.Info("Memory server not ready, requeueing", "deployment", memoryDeployName, "readyReplicas", memoryDeploy.Status.ReadyReplicas, "age", age.Truncate(time.Second))
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 	}
@@ -1518,9 +1528,10 @@ func (r *AgentRunReconciler) buildContainers(
 		)
 
 		// Init container to wait for memory server readiness before agent starts.
-		// Timeout after 60s — if the memory server isn't up by then, the instance
-		// controller likely hasn't reconciled the Deployment yet. The AgentRun will
-		// fail and can be retried, rather than hanging indefinitely.
+		// The controller already checks for ready replicas before creating the pod,
+		// so this is a safety net for cases where the memory server becomes briefly
+		// unavailable between the controller check and pod scheduling.
+		// Timeout after 120s to accommodate resource-constrained environments.
 		initContainers = append(initContainers, corev1.Container{
 			Name:            "wait-for-memory",
 			Image:           "busybox:1.36",
@@ -1533,7 +1544,7 @@ func (r *AgentRunReconciler) buildContainers(
 				},
 			},
 			Command: []string{"sh", "-c",
-				fmt.Sprintf("elapsed=0; until wget -q --spider --timeout=2 %s/health; do echo 'waiting for memory server...'; sleep 2; elapsed=$((elapsed+2)); if [ $elapsed -ge 60 ]; then echo 'ERROR: memory server not ready after 60s'; exit 1; fi; done", memoryURL),
+				fmt.Sprintf("elapsed=0; until wget -q --spider --timeout=2 %s/health; do echo 'waiting for memory server...'; sleep 2; elapsed=$((elapsed+2)); if [ $elapsed -ge 120 ]; then echo 'ERROR: memory server not ready after 120s'; exit 1; fi; done", memoryURL),
 			},
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{

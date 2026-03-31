@@ -28,12 +28,65 @@ import (
 // the agent stops and returns whatever text it has.
 var maxToolIterations = 50
 
+// llmRequestTimeout is the per-request timeout for individual LLM API calls.
+// For local providers (ollama, lm-studio, vllm) this prevents a single queued
+// request from consuming the entire run budget. Cloud providers get no
+// per-request timeout by default (they handle queuing server-side).
+var llmRequestTimeout time.Duration // 0 means no per-request timeout
+
+// llmMaxRetries is the maximum number of retries for LLM API calls.
+// The SDK already uses exponential backoff (0.5s * 2^attempt, max 8s).
+// Defaults: 2 for local providers, 5 for cloud providers.
+var llmMaxRetries = -1 // -1 means "use provider-appropriate default"
+
 func init() {
 	if val := os.Getenv("MAX_TOOL_ITERATIONS"); val != "" {
 		if n, err := strconv.Atoi(val); err == nil && n > 0 {
 			maxToolIterations = n
 		}
 	}
+	if val := os.Getenv("LLM_REQUEST_TIMEOUT"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil && d > 0 {
+			llmRequestTimeout = d
+		}
+	}
+	if val := os.Getenv("LLM_MAX_RETRIES"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n >= 0 {
+			llmMaxRetries = n
+		}
+	}
+}
+
+// isLocalProvider returns true for providers that run inference locally
+// (single-GPU, request queuing) where per-request timeouts matter.
+func isLocalProvider(provider string) bool {
+	switch provider {
+	case "ollama", "lm-studio", "vllm", "llamacpp", "local":
+		return true
+	}
+	return false
+}
+
+// effectiveMaxRetries returns the retry count for the given provider.
+func effectiveMaxRetries(provider string) int {
+	if llmMaxRetries >= 0 {
+		return llmMaxRetries // explicit override
+	}
+	if isLocalProvider(provider) {
+		return 2
+	}
+	return 5
+}
+
+// effectiveRequestTimeout returns the per-request timeout for the given provider.
+func effectiveRequestTimeout(provider string) time.Duration {
+	if llmRequestTimeout > 0 {
+		return llmRequestTimeout // explicit override
+	}
+	if isLocalProvider(provider) {
+		return 5 * time.Minute
+	}
+	return 0 // no per-request timeout for cloud providers
 }
 
 type agentResult struct {
@@ -181,6 +234,15 @@ func main() {
 
 	log.Printf("provider=%s model=%s baseURL=%s tools=%v task=%q",
 		provider, modelName, baseURL, toolsEnabled, truncate(task, 80))
+	reqTimeout := effectiveRequestTimeout(provider)
+	retries := effectiveMaxRetries(provider)
+	if reqTimeout > 0 {
+		log.Printf("llm_request_timeout=%s llm_max_retries=%d max_tool_iterations=%d",
+			reqTimeout, retries, maxToolIterations)
+	} else {
+		log.Printf("llm_request_timeout=none llm_max_retries=%d max_tool_iterations=%d",
+			retries, maxToolIterations)
+	}
 
 	_ = os.MkdirAll("/ipc/output", 0o755)
 
@@ -327,7 +389,10 @@ func main() {
 // a final text response or the iteration limit is reached.
 func callAnthropic(ctx context.Context, apiKey, baseURL, model, systemPrompt, task string, tools []ToolDef) (string, int, int, int, error) {
 	opts := []anthropicoption.RequestOption{
-		anthropicoption.WithMaxRetries(5),
+		anthropicoption.WithMaxRetries(effectiveMaxRetries("anthropic")),
+	}
+	if t := effectiveRequestTimeout("anthropic"); t > 0 {
+		opts = append(opts, anthropicoption.WithRequestTimeout(t))
 	}
 	if apiKey != "" {
 		opts = append(opts, anthropicoption.WithAPIKey(apiKey))
@@ -452,8 +517,14 @@ func callAnthropic(ctx context.Context, apiKey, baseURL, model, systemPrompt, ta
 // any tool_calls, feed results back, and repeat until the model produces a
 // final text response or the iteration limit is reached.
 func callOpenAI(ctx context.Context, provider, apiKey, baseURL, model, systemPrompt, task string, tools []ToolDef) (string, int, int, int, error) {
+	retries := effectiveMaxRetries(provider)
+	reqTimeout := effectiveRequestTimeout(provider)
+
 	opts := []openaioption.RequestOption{
-		openaioption.WithMaxRetries(5),
+		openaioption.WithMaxRetries(retries),
+	}
+	if reqTimeout > 0 {
+		opts = append(opts, openaioption.WithRequestTimeout(reqTimeout))
 	}
 
 	switch provider {

@@ -582,6 +582,16 @@ func (r *SympoziumInstanceReconciler) reconcileMemoryDeployment(ctx context.Cont
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "memory-db", MountPath: "/data"},
 							},
+							StartupProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/health",
+										Port: intstr.FromInt32(8080),
+									},
+								},
+								PeriodSeconds:    2,
+								FailureThreshold: 30, // up to 60s for slow PVC mounts
+							},
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
@@ -589,8 +599,7 @@ func (r *SympoziumInstanceReconciler) reconcileMemoryDeployment(ctx context.Cont
 										Port: intstr.FromInt32(8080),
 									},
 								},
-								InitialDelaySeconds: 2,
-								PeriodSeconds:       10,
+								PeriodSeconds: 10,
 							},
 							LivenessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{

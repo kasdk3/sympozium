@@ -192,7 +192,7 @@ func (r *PersonaPackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Reconcile each persona → instance + schedule + memory
 	var installed []sympoziumv1alpha1.InstalledPersona
 	var installErr error
-	for _, persona := range pack.Spec.Personas {
+	for i, persona := range pack.Spec.Personas {
 		// Skip personas that have been excluded (disabled via TUI).
 		if isExcluded(persona.Name, pack.Spec.ExcludePersonas) {
 			if err := r.cleanupPersona(ctx, log, pack, &persona); err != nil {
@@ -200,7 +200,7 @@ func (r *PersonaPackReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			}
 			continue
 		}
-		ip, err := r.reconcilePersona(ctx, log, pack, &persona)
+		ip, err := r.reconcilePersona(ctx, log, pack, &persona, i)
 		if err != nil {
 			log.Error(err, "Failed to reconcile persona", "persona", persona.Name)
 			installErr = err
@@ -232,6 +232,7 @@ func (r *PersonaPackReconciler) reconcilePersona(
 	log logr.Logger,
 	pack *sympoziumv1alpha1.PersonaPack,
 	persona *sympoziumv1alpha1.PersonaSpec,
+	personaIndex int,
 ) (sympoziumv1alpha1.InstalledPersona, error) {
 	instanceName := pack.Name + "-" + persona.Name
 	ip := sympoziumv1alpha1.InstalledPersona{
@@ -338,7 +339,7 @@ func (r *PersonaPackReconciler) reconcilePersona(
 	if persona.Schedule != nil {
 		ip.ScheduleName = schedName
 
-		desired := r.buildSchedule(pack, persona, instanceName, schedName)
+		desired := r.buildSchedule(pack, persona, instanceName, schedName, personaIndex)
 		existingSched := &sympoziumv1alpha1.SympoziumSchedule{}
 		err := r.Get(ctx, client.ObjectKey{Name: schedName, Namespace: pack.Namespace}, existingSched)
 		if errors.IsNotFound(err) {
@@ -502,14 +503,21 @@ func (r *PersonaPackReconciler) buildInstance(
 }
 
 // buildSchedule creates a SympoziumSchedule from a persona's schedule config.
+// personaIndex is used to stagger interval-based schedules so that personas in
+// the same pack don't fire simultaneously and contend for a shared LLM.
 func (r *PersonaPackReconciler) buildSchedule(
 	pack *sympoziumv1alpha1.PersonaPack,
 	persona *sympoziumv1alpha1.PersonaSpec,
 	instanceName, schedName string,
+	personaIndex int,
 ) *sympoziumv1alpha1.SympoziumSchedule {
 	cron := persona.Schedule.Cron
 	if cron == "" {
-		cron = intervalToCron(persona.Schedule.Interval)
+		// Stagger each persona by 2 minutes to avoid GPU contention on local LLMs.
+		// For a 5-min interval with 7 personas this gives offsets 0,2,4,1,3,0,2 —
+		// at most 2 agents overlap instead of all 7 firing simultaneously.
+		staggerMin := personaIndex * 2
+		cron = intervalToCron(persona.Schedule.Interval, staggerMin)
 	}
 
 	return &sympoziumv1alpha1.SympoziumSchedule{
@@ -589,36 +597,41 @@ func (r *PersonaPackReconciler) reconcileMemorySeeds(
 }
 
 // intervalToCron converts a human-readable interval to a cron expression.
-func intervalToCron(interval string) string {
+// offsetMin staggers the schedule by shifting the minute field, so that
+// personas in the same pack don't all fire simultaneously and contend for
+// a shared LLM (especially important with local models like LM Studio).
+func intervalToCron(interval string, offsetMin int) string {
 	switch strings.ToLower(strings.TrimSpace(interval)) {
 	case "1m", "1min":
-		return "* * * * *"
+		return "* * * * *" // can't stagger 1-minute intervals
 	case "5m", "5min":
-		return "*/5 * * * *"
+		return fmt.Sprintf("%d/5 * * * *", offsetMin%5)
 	case "10m", "10min":
-		return "*/10 * * * *"
+		return fmt.Sprintf("%d/10 * * * *", offsetMin%10)
 	case "15m", "15min":
-		return "*/15 * * * *"
+		return fmt.Sprintf("%d/15 * * * *", offsetMin%15)
 	case "30m", "30min":
-		return "*/30 * * * *"
+		return fmt.Sprintf("%d/30 * * * *", offsetMin%30)
 	case "1h", "60m":
-		return "0 * * * *"
+		return fmt.Sprintf("%d * * * *", offsetMin%60)
 	case "2h":
-		return "0 */2 * * *"
+		return fmt.Sprintf("%d */2 * * *", offsetMin%60)
+	case "3h":
+		return fmt.Sprintf("%d */3 * * *", offsetMin%60)
 	case "4h":
-		return "0 */4 * * *"
+		return fmt.Sprintf("%d */4 * * *", offsetMin%60)
 	case "6h":
-		return "0 */6 * * *"
+		return fmt.Sprintf("%d */6 * * *", offsetMin%60)
 	case "12h":
-		return "0 */12 * * *"
+		return fmt.Sprintf("%d */12 * * *", offsetMin%60)
 	case "24h", "1d":
-		return "0 0 * * *"
+		return fmt.Sprintf("%d 0 * * *", offsetMin%60)
 	default:
 		// If it already looks like a cron expression, return as-is
 		if strings.Contains(interval, " ") {
 			return interval
 		}
-		return "0 * * * *" // default: hourly
+		return fmt.Sprintf("%d * * * *", offsetMin%60) // default: hourly
 	}
 }
 
