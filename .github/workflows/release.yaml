@@ -64,40 +64,6 @@ jobs:
             sympozium-*.tar.gz
             sympozium-*.sha256
 
-  release-manifests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Stamp image tags with release version
-        run: |
-          TAG="${RELEASE_TAG}"
-          echo "Stamping image tags with ${TAG}..."
-          find config/ -name '*.yaml' -exec \
-            sed -i "s|ghcr.io/sympozium-ai/sympozium/\([^:]*\):latest|ghcr.io/sympozium-ai/sympozium/\1:${TAG}|g" {} +
-
-      - name: Package install manifests
-        run: |
-          tar -czf sympozium-manifests.tar.gz \
-            config/crd/bases/ \
-            config/manager/ \
-            config/rbac/ \
-            config/webhook/ \
-            config/network/ \
-            config/nats/ \
-            config/cert/ \
-            config/node-probe/ \
-            config/observability/ \
-            config/skills/ \
-            config/policies/ \
-            config/personas/
-
-      - name: Upload manifests
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: sympozium-manifests.tar.gz
-
   release-images:
     runs-on: ubuntu-latest
     strategy:
@@ -159,7 +125,7 @@ jobs:
   # ── Sync Helm chart with release ──────────────────────────────────────────────
   release-helm-chart:
     name: Sync Helm chart
-    needs: [release-images, release-manifests]
+    needs: [release-images]
     runs-on: ubuntu-latest
     permissions:
       contents: write

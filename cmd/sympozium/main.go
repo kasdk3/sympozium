@@ -26,6 +26,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart"
+	helmcli "helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/strvals"
+
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	sympoziumv1alpha1 "github.com/sympozium-ai/sympozium/api/v1alpha1"
+	"github.com/sympozium-ai/sympozium/internal/helmchart"
 )
 
 var (
@@ -548,7 +554,6 @@ func newVersionCmd() *cobra.Command {
 
 const (
 	ghRepo            = "sympozium-ai/sympozium"
-	manifestAsset     = "sympozium-manifests.tar.gz"
 	gatewayAPICRDsURL = "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml"
 )
 
@@ -1176,25 +1181,25 @@ func kubectlApplyStdin(yaml string) error {
 }
 
 func newInstallCmd() *cobra.Command {
-	var manifestVersion string
 	var imageTag string
+	var setValues []string
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install Sympozium into the current Kubernetes cluster",
-		Long: `Downloads the Sympozium release manifests from GitHub and applies
-them to your current Kubernetes cluster using kubectl.
+		Long: `Installs Sympozium using the embedded Helm chart. This sets up CRDs,
+the controller manager, API server, admission webhook, RBAC rules,
+network policies, and default SkillPacks/Policies/PersonaPacks.
 
-Installs CRDs, the controller manager, API server, admission webhook,
-RBAC rules, and network policies.
+Use --image-tag to override the container image tag, for example when
+you have sideloaded images into Kind with a custom tag.
 
-Use --image-tag to override the container image tag in the manifests,
-for example when you have sideloaded images into Kind with a custom tag.`,
+Use --set to override arbitrary Helm values (e.g. --set controller.replicas=2).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInstall(manifestVersion, imageTag)
+			return runInstall(imageTag, setValues)
 		},
 	}
-	cmd.Flags().StringVar(&manifestVersion, "version", "", "Release version to install (default: latest)")
-	cmd.Flags().StringVar(&imageTag, "image-tag", "", "Override image tag in manifests (e.g. 'latest')")
+	cmd.Flags().StringVar(&imageTag, "image-tag", "", "Override image tag (e.g. 'latest')")
+	cmd.Flags().StringArrayVar(&setValues, "set", nil, "Set Helm values (key=value, can be repeated)")
 	return cmd
 }
 
@@ -1208,80 +1213,104 @@ func newUninstallCmd() *cobra.Command {
 	}
 }
 
-func runInstall(ver, imageTag string) error {
-	if ver == "" || ver == "latest" {
-		if version != "dev" && ver == "" {
-			ver = version
-		} else {
-			v, err := resolveLatestTag()
-			if err != nil {
-				return err
-			}
-			ver = v
+const (
+	helmReleaseName = "sympozium"
+	helmNamespace   = "sympozium-system"
+)
+
+// newHelmConfig creates a Helm action.Configuration bound to the given namespace.
+func newHelmConfig(ns string) (*action.Configuration, error) {
+	cfg := new(action.Configuration)
+	// Use the same kubeconfig resolution as the rest of the CLI.
+	kubeconfigPath := kubeconfig
+	if kubeconfigPath == "" {
+		kubeconfigPath = clientcmd.RecommendedHomeFile
+	}
+	settings := helmcli.New()
+	settings.KubeConfig = kubeconfigPath
+	settings.SetNamespace(ns)
+	if err := cfg.Init(settings.RESTClientGetter(), ns, "secret", func(format string, v ...interface{}) {
+		// Silence Helm's debug logging.
+	}); err != nil {
+		return nil, fmt.Errorf("initializing Helm config: %w", err)
+	}
+	return cfg, nil
+}
+
+// buildHelmValues constructs a Helm values map from CLI flags.
+func buildHelmValues(imageTag string, setValues []string) (map[string]interface{}, error) {
+	vals := make(map[string]interface{})
+	if imageTag != "" {
+		vals["image"] = map[string]interface{}{
+			"tag": imageTag,
 		}
 	}
+	for _, kv := range setValues {
+		parts := strings.SplitN(kv, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid --set value %q (expected key=value)", kv)
+		}
+		if err := strvals.ParseInto(kv, vals); err != nil {
+			return nil, fmt.Errorf("parsing --set %q: %w", kv, err)
+		}
+	}
+	return vals, nil
+}
 
-	fmt.Printf("  Installing Sympozium %s...\n", ver)
-
-	// Download manifest bundle.
-	url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", ghRepo, ver, manifestAsset)
-	tmpDir, err := os.MkdirTemp("", "sympozium-install-*")
+// applyCRDs extracts CRDs from the embedded chart and applies them via kubectl
+// with server-side apply. Helm installs CRDs on first install but never upgrades
+// them, so we handle CRDs separately to ensure upgrades work correctly.
+func applyCRDs(ch *chart.Chart) error {
+	if len(ch.CRDObjects()) == 0 {
+		return nil
+	}
+	tmpDir, err := os.MkdirTemp("", "sympozium-crds-*")
 	if err != nil {
 		return fmt.Errorf("create temp dir: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	bundlePath := filepath.Join(tmpDir, manifestAsset)
-	fmt.Println("  Downloading manifests...")
-	if err := downloadFile(url, bundlePath); err != nil {
-		return fmt.Errorf("download manifests: %w", err)
-	}
-
-	// Extract.
-	fmt.Println("  Extracting...")
-	tar := exec.Command("tar", "-xzf", bundlePath, "-C", tmpDir)
-	tar.Stderr = os.Stderr
-	if err := tar.Run(); err != nil {
-		return fmt.Errorf("extract manifests: %w", err)
-	}
-
-	// Rewrite image tags if --image-tag was provided.
-	if imageTag != "" {
-		fmt.Printf("  Rewriting image tags to :%s...\n", imageTag)
-		sed := exec.Command("find", filepath.Join(tmpDir, "config"), "-name", "*.yaml", "-exec",
-			"sed", "-i",
-			fmt.Sprintf(`s|ghcr.io/sympozium-ai/sympozium/\([^:]*\):[^ ]*|ghcr.io/sympozium-ai/sympozium/\1:%s|g`, imageTag),
-			"{}", "+")
-		sed.Stderr = os.Stderr
-		if err := sed.Run(); err != nil {
-			return fmt.Errorf("rewrite image tags: %w", err)
+	for _, crd := range ch.CRDObjects() {
+		path := filepath.Join(tmpDir, crd.Name)
+		if err := os.WriteFile(path, crd.File.Data, 0644); err != nil {
+			return fmt.Errorf("writing CRD %s: %w", crd.Name, err)
 		}
 	}
-
-	// Apply CRDs first (server-side apply to handle schema updates cleanly).
 	fmt.Println("  Applying CRDs...")
-	if err := kubectl("apply", "--server-side", "--force-conflicts", "-f", filepath.Join(tmpDir, "config/crd/bases/")); err != nil {
+	return kubectl("apply", "--server-side", "--force-conflicts", "-f", tmpDir)
+}
+
+func runInstall(imageTag string, setValues []string) error {
+	ver := version
+	if ver == "" || ver == "dev" {
+		ver = "embedded"
+	}
+	fmt.Printf("  Installing Sympozium %s...\n", ver)
+
+	// Load the embedded Helm chart.
+	ch, err := helmchart.Load()
+	if err != nil {
+		return fmt.Errorf("loading embedded chart: %w", err)
+	}
+
+	// Build Helm values from CLI flags.
+	vals, err := buildHelmValues(imageTag, setValues)
+	if err != nil {
 		return err
 	}
 
-	// Install Gateway API CRDs (required for GatewayClass, Gateway, HTTPRoute).
+	// ── Pre-flight: CRDs ────────────────────────────────────────────────
+	if err := applyCRDs(ch); err != nil {
+		return err
+	}
+
+	// ── Pre-flight: Gateway API CRDs ────────────────────────────────────
 	fmt.Println("  Installing Gateway API CRDs...")
 	if err := kubectl("apply", "--server-side", "--force-conflicts", "-f", gatewayAPICRDsURL); err != nil {
 		return fmt.Errorf("install Gateway API CRDs: %w", err)
 	}
 
-	// Create namespace before RBAC (ServiceAccounts reference it).
-	// Ignore AlreadyExists error on re-installs.
-	fmt.Println("  Creating namespace...")
-	_ = kubectl("create", "namespace", "sympozium-system")
-
-	// Deploy NATS event bus.
-	fmt.Println("  Deploying NATS event bus...")
-	if err := kubectl("apply", "-f", resolveConfigPath(tmpDir, "config/nats/")); err != nil {
-		return err
-	}
-
-	// Install cert-manager if not present, then apply webhook certificate.
+	// ── Pre-flight: cert-manager ────────────────────────────────────────
 	fmt.Println("  Checking cert-manager...")
 	if err := kubectlQuiet("get", "namespace", "cert-manager"); err != nil {
 		fmt.Println("  Installing cert-manager...")
@@ -1296,130 +1325,46 @@ func runInstall(ver, imageTag string) error {
 			"-n", "cert-manager", "--timeout=120s")
 		_ = kubectl("wait", "--for=condition=Available", "deployment/cert-manager-cainjector",
 			"-n", "cert-manager", "--timeout=120s")
-		// The webhook needs a few extra seconds after the Deployment is Available
-		// to finish TLS bootstrapping. Retry the certificate creation.
 		fmt.Println("  Waiting for cert-manager webhook TLS to bootstrap...")
 		time.Sleep(10 * time.Second)
 	}
 
-	fmt.Println("  Creating webhook certificate...")
-	// Retry with backoff — cert-manager's webhook may still be bootstrapping TLS.
-	var certErr error
-	for attempt := 0; attempt < 5; attempt++ {
-		if certErr = kubectl("apply", "-f", resolveConfigPath(tmpDir, "config/cert/")); certErr == nil {
-			break
-		}
-		wait := time.Duration(5*(attempt+1)) * time.Second
-		fmt.Printf("  Cert-manager webhook not ready, retrying in %s...\n", wait)
-		time.Sleep(wait)
-	}
-	if certErr != nil {
-		return fmt.Errorf("creating webhook certificate (cert-manager webhook may not be ready): %w", certErr)
-	}
-
-	// Apply RBAC.
-	fmt.Println("  Applying RBAC...")
-	if err := kubectl("apply", "-f", filepath.Join(tmpDir, "config/rbac/")); err != nil {
+	// ── Helm install or upgrade ─────────────────────────────────────────
+	cfg, err := newHelmConfig(helmNamespace)
+	if err != nil {
 		return err
 	}
 
-	// Generate a random UI token for the web dashboard (if not already present).
-	// This MUST happen before deploying the apiserver so the pod can read it on startup.
-	fmt.Println("  Creating web UI token secret...")
-	if err := kubectlQuiet("get", "secret", "sympozium-ui-token", "-n", "sympozium-system"); err != nil {
-		// Secret doesn't exist — create one with a random token.
-		createSecret := exec.Command("kubectl", "create", "secret", "generic", "sympozium-ui-token",
-			"-n", "sympozium-system",
-			"--from-literal=token="+generateToken(32))
-		createSecret.Stderr = os.Stderr
-		if secErr := createSecret.Run(); secErr != nil {
-			fmt.Printf("  Warning: failed to create UI token secret: %v\n", secErr)
+	// Check if a release already exists.
+	histClient := action.NewHistory(cfg)
+	histClient.Max = 1
+	_, err = histClient.Run(helmReleaseName)
+
+	if err != nil {
+		// No existing release — fresh install.
+		fmt.Println("  Running Helm install...")
+		install := action.NewInstall(cfg)
+		install.ReleaseName = helmReleaseName
+		install.Namespace = helmNamespace
+		install.CreateNamespace = true
+		install.SkipCRDs = true // We applied CRDs above.
+		install.Wait = false    // Don't block — cert-manager certificate may need time.
+		install.Timeout = 5 * time.Minute
+
+		if _, err := install.Run(ch, vals); err != nil {
+			return fmt.Errorf("helm install: %w", err)
 		}
 	} else {
-		fmt.Println("  UI token secret already exists, skipping.")
-	}
+		// Existing release — upgrade.
+		fmt.Println("  Running Helm upgrade...")
+		upgrade := action.NewUpgrade(cfg)
+		upgrade.Namespace = helmNamespace
+		upgrade.SkipCRDs = true
+		upgrade.Wait = false
+		upgrade.Timeout = 5 * time.Minute
 
-	// Apply manager (controller + apiserver).
-	fmt.Println("  Deploying control plane...")
-	if err := kubectl("apply", "-f", filepath.Join(tmpDir, "config/manager/")); err != nil {
-		return err
-	}
-
-	// Apply webhook (use --server-side --force-conflicts to overwrite stale configs).
-	fmt.Println("  Deploying webhook...")
-	if err := kubectl("apply", "--server-side", "--force-conflicts", "-f", filepath.Join(tmpDir, "config/webhook/")); err != nil {
-		return err
-	}
-
-	// Apply network policies.
-	fmt.Println("  Applying network policies...")
-	if err := kubectl("apply", "-f", filepath.Join(tmpDir, "config/network/")); err != nil {
-		return err
-	}
-
-	// Deploy node-probe DaemonSet (inference provider discovery).
-	nodeProbeDir := filepath.Join(tmpDir, "config/node-probe/")
-	if _, err := os.Stat(nodeProbeDir); err == nil {
-		fmt.Println("  Deploying node-probe DaemonSet...")
-		if err := kubectl("apply", "-f", nodeProbeDir); err != nil {
-			fmt.Printf("  Warning: failed to deploy node-probe: %v\n", err)
-		}
-	} else {
-		nodeProbeURL := fmt.Sprintf(
-			"https://raw.githubusercontent.com/%s/%s/config/node-probe/node-probe.yaml",
-			ghRepo, ver,
-		)
-		fmt.Println("  Node-probe manifests missing in bundle; applying fallback...")
-		if err := kubectl("apply", "-f", nodeProbeURL); err != nil {
-			fmt.Printf("  Warning: failed to deploy node-probe fallback: %v\n", err)
-		}
-	}
-
-	// Deploy built-in OpenTelemetry collector for observability.
-	observabilityDir := filepath.Join(tmpDir, "config/observability/")
-	if _, err := os.Stat(observabilityDir); err == nil {
-		fmt.Println("  Deploying OpenTelemetry collector...")
-		if err := kubectl("apply", "-f", observabilityDir); err != nil {
-			fmt.Printf("  Warning: failed to deploy OpenTelemetry collector: %v\n", err)
-		}
-	} else {
-		observabilityURL := fmt.Sprintf(
-			"https://raw.githubusercontent.com/%s/%s/config/observability/otel-collector.yaml",
-			ghRepo, ver,
-		)
-		fmt.Println("  Observability manifests missing in bundle; applying collector fallback...")
-		if err := kubectl("apply", "-f", observabilityURL); err != nil {
-			fmt.Printf("  Warning: failed to deploy OpenTelemetry collector fallback: %v\n", err)
-		}
-	}
-
-	// Install default SkillPacks into sympozium-system.
-	skillsDir := filepath.Join(tmpDir, "config/skills/")
-	if _, err := os.Stat(skillsDir); err == nil {
-		fmt.Println("  Installing default SkillPacks...")
-		if err := kubectl("apply", "--server-side", "--force-conflicts", "-f", skillsDir); err != nil {
-			// Non-fatal — skills are optional.
-			fmt.Printf("  Warning: failed to install default skills: %v\n", err)
-		}
-	}
-
-	// Install default SympoziumPolicies (permissive, restrictive, network-isolated).
-	policiesDir := filepath.Join(tmpDir, "config/policies/")
-	if _, err := os.Stat(policiesDir); err == nil {
-		fmt.Println("  Installing default SympoziumPolicies...")
-		if err := kubectl("apply", "--server-side", "--force-conflicts", "-f", policiesDir); err != nil {
-			// Non-fatal — policies are optional.
-			fmt.Printf("  Warning: failed to install default policies: %v\n", err)
-		}
-	}
-
-	// Install default PersonaPacks (e.g. platform-team, devops-essentials).
-	personasDir := filepath.Join(tmpDir, "config/personas/")
-	if _, err := os.Stat(personasDir); err == nil {
-		fmt.Println("  Installing default PersonaPacks...")
-		if err := kubectl("apply", "--server-side", "--force-conflicts", "-n", "sympozium-system", "-f", personasDir); err != nil {
-			// Non-fatal — persona packs are optional.
-			fmt.Printf("  Warning: failed to install default persona packs: %v\n", err)
+		if _, err := upgrade.Run(helmReleaseName, ch, vals); err != nil {
+			return fmt.Errorf("helm upgrade: %w", err)
 		}
 	}
 
@@ -1445,42 +1390,49 @@ func runUninstall() error {
 		_ = kubectl("delete", res+".sympozium.ai", "--all", "--all-namespaces", "--ignore-not-found", "--timeout=60s")
 	}
 
-	// Delete in reverse order.
-	manifests := []string{
-		"https://raw.githubusercontent.com/" + ghRepo + "/main/config/node-probe/node-probe.yaml",
-		"https://raw.githubusercontent.com/" + ghRepo + "/main/config/observability/otel-collector.yaml",
-		"https://raw.githubusercontent.com/" + ghRepo + "/main/config/cert/certificate.yaml",
-		"https://raw.githubusercontent.com/" + ghRepo + "/main/config/network/policies.yaml",
-		"https://raw.githubusercontent.com/" + ghRepo + "/main/config/webhook/manifests.yaml",
-		"https://raw.githubusercontent.com/" + ghRepo + "/main/config/manager/manager.yaml",
-		"https://raw.githubusercontent.com/" + ghRepo + "/main/config/nats/nats.yaml",
-		"https://raw.githubusercontent.com/" + ghRepo + "/main/config/rbac/role_binding.yaml",
-		"https://raw.githubusercontent.com/" + ghRepo + "/main/config/rbac/service_account.yaml",
-		"https://raw.githubusercontent.com/" + ghRepo + "/main/config/rbac/role.yaml",
-	}
-	for _, m := range manifests {
-		_ = kubectl("delete", "--ignore-not-found", "-f", m)
+	// ── Helm uninstall ──────────────────────────────────────────────────
+	cfg, err := newHelmConfig(helmNamespace)
+	if err != nil {
+		// If we can't init Helm config, fall back to manual cleanup.
+		fmt.Printf("  Warning: could not initialize Helm config: %v\n", err)
+		fmt.Println("  Falling back to manual resource cleanup...")
+		manualUninstall()
+	} else {
+		histClient := action.NewHistory(cfg)
+		histClient.Max = 1
+		if _, err := histClient.Run(helmReleaseName); err == nil {
+			// Helm release exists — uninstall it.
+			fmt.Println("  Running Helm uninstall...")
+			uninstall := action.NewUninstall(cfg)
+			uninstall.Timeout = 2 * time.Minute
+			uninstall.KeepHistory = false
+			if _, err := uninstall.Run(helmReleaseName); err != nil {
+				fmt.Printf("  Warning: helm uninstall returned error: %v\n", err)
+			}
+		} else {
+			// No Helm release found — this may be a legacy (pre-Helm) install.
+			fmt.Println("  No Helm release found, cleaning up legacy resources...")
+			manualUninstall()
+		}
 	}
 
-	// CRDs last.
-	crdBase := "https://raw.githubusercontent.com/" + ghRepo + "/main/config/crd/bases/"
-	crds := []string{
-		"sympozium.ai_sympoziuminstances.yaml",
-		"sympozium.ai_agentruns.yaml",
-		"sympozium.ai_sympoziumpolicies.yaml",
-		"sympozium.ai_skillpacks.yaml",
-		"sympozium.ai_sympoziumschedules.yaml",
-		"sympozium.ai_personapacks.yaml",
-	}
-	for _, c := range crds {
-		_ = kubectl("delete", "--ignore-not-found", "-f", crdBase+c)
+	// ── CRDs (Helm does not delete CRDs by design) ──────────────────────
+	fmt.Println("  Deleting Sympozium CRDs...")
+	ch, err := helmchart.Load()
+	if err == nil {
+		for _, crd := range ch.CRDObjects() {
+			_ = kubectlApplyDeleteStdin(string(crd.File.Data))
+		}
+	} else {
+		// Fallback: delete by label.
+		_ = kubectl("delete", "crd", "-l", "app.kubernetes.io/name=sympozium", "--ignore-not-found")
 	}
 
 	// Remove Gateway API CRDs installed by sympozium.
 	fmt.Println("  Removing Gateway API CRDs...")
 	_ = kubectl("delete", "--ignore-not-found", "-f", gatewayAPICRDsURL)
 
-	// Remove the system namespace created during install.
+	// Remove the system namespace.
 	fmt.Println("  Deleting namespace sympozium-system...")
 	_ = kubectl("delete", "namespace", "sympozium-system", "--ignore-not-found", "--timeout=120s")
 
@@ -1488,9 +1440,38 @@ func runUninstall() error {
 	return nil
 }
 
+// manualUninstall deletes Sympozium resources directly via kubectl, used as a
+// fallback for clusters where Sympozium was installed before the Helm migration.
+func manualUninstall() {
+	// Delete known resource types that the old raw-manifest install created.
+	kinds := []string{
+		"deployment", "service", "daemonset", "configmap",
+		"serviceaccount", "clusterrole", "clusterrolebinding",
+		"role", "rolebinding", "networkpolicy",
+		"certificate", "issuer",
+		"validatingwebhookconfiguration",
+	}
+	for _, k := range kinds {
+		_ = kubectl("delete", k, "-n", helmNamespace, "-l", "app.kubernetes.io/part-of=sympozium", "--ignore-not-found")
+	}
+	// Also try by name for resources that may lack labels.
+	_ = kubectl("delete", "deployment", "-n", helmNamespace,
+		"sympozium-controller-manager", "sympozium-apiserver",
+		"sympozium-webhook", "sympozium-nats", "sympozium-web-proxy",
+		"--ignore-not-found")
+}
+
+// kubectlApplyDeleteStdin pipes YAML to kubectl delete.
+func kubectlApplyDeleteStdin(yaml string) error {
+	cmd := exec.Command("kubectl", "delete", "--ignore-not-found", "-f", "-")
+	cmd.Stdin = strings.NewReader(yaml)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // stripFinalizers patches all instances of a Sympozium CRD to remove finalizers.
 func stripFinalizers(resource string) {
-	// List all resource names across all namespaces.
 	out, err := exec.Command("kubectl", "get", resource+".sympozium.ai",
 		"--all-namespaces", "-o", "jsonpath={range .items[*]}{.metadata.namespace}/{.metadata.name}{\"\\n\"}{end}").
 		Output()
@@ -1512,45 +1493,6 @@ func stripFinalizers(resource string) {
 	}
 }
 
-func resolveLatestTag() (string, error) {
-	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		return http.ErrUseLastResponse
-	}}
-	resp, err := client.Get(fmt.Sprintf("https://github.com/%s/releases/latest", ghRepo))
-	if err != nil {
-		return "", fmt.Errorf("resolve latest release: %w", err)
-	}
-	defer resp.Body.Close()
-
-	loc := resp.Header.Get("Location")
-	if loc == "" {
-		return "", fmt.Errorf("no releases found at github.com/%s", ghRepo)
-	}
-	parts := strings.Split(loc, "/tag/")
-	if len(parts) < 2 {
-		return "", fmt.Errorf("unexpected redirect URL: %s", loc)
-	}
-	return parts[1], nil
-}
-
-func downloadFile(url, dest string) error {
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
-	}
-	f, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = io.Copy(f, resp.Body)
-	return err
-}
-
 func kubectl(args ...string) error {
 	cmd := exec.Command("kubectl", args...)
 	cmd.Stdout = os.Stdout
@@ -1565,21 +1507,6 @@ func kubectlQuiet(args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = io.Discard
 	return cmd.Run()
-}
-
-// resolveConfigPath checks for a config path in the extracted bundle first,
-// then falls back to the local working tree (for dev builds run from source).
-func resolveConfigPath(bundleDir, relPath string) string {
-	bundled := filepath.Join(bundleDir, relPath)
-	if _, err := os.Stat(bundled); err == nil {
-		return bundled
-	}
-	// Dev fallback: check if we're running from the source tree.
-	if _, err := os.Stat(relPath); err == nil {
-		return relPath
-	}
-	// Return the bundled path anyway; kubectl will report the error.
-	return bundled
 }
 
 // generateToken returns a random alphanumeric string of the given length.
