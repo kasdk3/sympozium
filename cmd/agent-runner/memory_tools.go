@@ -323,6 +323,47 @@ func queryMemoryContext(task string, maxResults int) string {
 	return formatted
 }
 
+// autoStoreMemory stores a summary of the completed task and response in the
+// memory server so future agent runs have context. This is fire-and-forget —
+// errors are logged but do not affect the agent run.
+func autoStoreMemory(task, response string) {
+	if memoryServerURL == "" {
+		return
+	}
+
+	// Truncate to keep stored entries reasonably sized.
+	const maxTask = 500
+	const maxResponse = 1000
+	if len(task) > maxTask {
+		task = task[:maxTask] + "..."
+	}
+	if len(response) > maxResponse {
+		response = response[:maxResponse] + "..."
+	}
+
+	content := fmt.Sprintf("Task: %s\n\nResponse: %s", task, response)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	body := map[string]any{
+		"content": content,
+		"tags":    []string{"auto", "agent-run"},
+	}
+	resp, err := memoryPost(ctx, "/store", body)
+	if err != nil {
+		log.Printf("auto-store memory failed: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("auto-store memory: server returned %d", resp.StatusCode)
+		return
+	}
+	log.Printf("auto-stored memory for task (%d bytes)", len(content))
+}
+
 func initMemoryTools() []ToolDef {
 	memoryServerURL = os.Getenv("MEMORY_SERVER_URL")
 	if memoryServerURL == "" {

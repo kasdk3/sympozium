@@ -349,6 +349,11 @@ func main() {
 		runSpan.SetStatus(codes.Ok, "")
 	}
 
+	// Auto-store task/response in memory server for future context.
+	if res.Status == "success" && res.Response != "" {
+		go autoStoreMemory(task, res.Response)
+	}
+
 	// Extract and emit memory update before stripping markers from the response.
 	if memoryEnabled && res.Response != "" {
 		if memUpdate := extractMemoryUpdate(res.Response); memUpdate != "" {
