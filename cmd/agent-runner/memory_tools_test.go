@@ -336,6 +336,140 @@ func TestExecuteMemoryTool_RetriesExhausted(t *testing.T) {
 	}
 }
 
+// ── queryMemoryContext tests ─────────────────────────────────────────────────
+
+func TestQueryMemoryContext_NoServer(t *testing.T) {
+	old := memoryServerURL
+	memoryServerURL = ""
+	defer func() { memoryServerURL = old }()
+
+	result := queryMemoryContext("check pods", 3)
+	if result != "" {
+		t.Errorf("expected empty string when no server, got %q", result)
+	}
+}
+
+func TestQueryMemoryContext_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/search" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["top_k"] != float64(3) {
+			t.Errorf("expected top_k=3, got %v", body["top_k"])
+		}
+		resp := map[string]any{
+			"success": true,
+			"content": []map[string]any{
+				{"id": 1, "content": "kafka lag detected in payments-ns", "tags": []string{"kafka"}, "created_at": "2026-03-23T00:00:00Z"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	old := memoryServerURL
+	memoryServerURL = srv.URL
+	defer func() { memoryServerURL = old }()
+
+	result := queryMemoryContext("check kafka consumers", 3)
+	if result == "" {
+		t.Fatal("expected non-empty result")
+	}
+	if !strings.Contains(result, "kafka lag detected") {
+		t.Errorf("expected memory content in result, got %q", result)
+	}
+}
+
+func TestQueryMemoryContext_EmptyResults(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]any{
+			"success": true,
+			"content": []map[string]any{},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	old := memoryServerURL
+	memoryServerURL = srv.URL
+	defer func() { memoryServerURL = old }()
+
+	result := queryMemoryContext("something unrelated", 3)
+	if result != "" {
+		t.Errorf("expected empty string for no results, got %q", result)
+	}
+}
+
+func TestQueryMemoryContext_ServerDown(t *testing.T) {
+	old := memoryServerURL
+	memoryServerURL = "http://127.0.0.1:1" // connection refused
+	defer func() { memoryServerURL = old }()
+
+	result := queryMemoryContext("check pods", 3)
+	if result != "" {
+		t.Errorf("expected empty string when server is down, got %q", result)
+	}
+}
+
+func TestQueryMemoryContext_Truncation(t *testing.T) {
+	// Build a response large enough to exceed memoryContextMaxChars.
+	var entries []map[string]any
+	for i := 0; i < 20; i++ {
+		entries = append(entries, map[string]any{
+			"id":         i + 1,
+			"content":    strings.Repeat("long content here. ", 30),
+			"tags":       []string{"test"},
+			"created_at": "2026-03-23T00:00:00Z",
+		})
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]any{"success": true, "content": entries}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	old := memoryServerURL
+	memoryServerURL = srv.URL
+	defer func() { memoryServerURL = old }()
+
+	result := queryMemoryContext("test", 20)
+	if len(result) > memoryContextMaxChars {
+		t.Errorf("result length %d exceeds max %d", len(result), memoryContextMaxChars)
+	}
+	if result == "" {
+		t.Error("expected non-empty truncated result")
+	}
+}
+
+func TestQueryMemoryContext_LongTaskTruncated(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		gotQuery, _ = body["query"].(string)
+		resp := map[string]any{"success": true, "content": []map[string]any{}}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	old := memoryServerURL
+	memoryServerURL = srv.URL
+	defer func() { memoryServerURL = old }()
+
+	longTask := strings.Repeat("a", 500)
+	queryMemoryContext(longTask, 3)
+	if len(gotQuery) > 200 {
+		t.Errorf("expected query truncated to 200 chars, got %d", len(gotQuery))
+	}
+}
+
 func TestExecuteMemoryTool_RetriesWithRecovery(t *testing.T) {
 	var callCount atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -147,11 +147,20 @@ func (r *AgentRunReconciler) reconcilePendingAgentSandbox(
 			Name:      memoryDeployName,
 		}, &memoryDeploy); err != nil {
 			age := time.Since(agentRun.CreationTimestamp.Time)
-			if age > 60*time.Second {
+			if age > 120*time.Second {
 				return ctrl.Result{}, r.failRun(ctx, agentRun,
 					fmt.Sprintf("memory server deployment %q not found after %s", memoryDeployName, age.Truncate(time.Second)))
 			}
-			log.Info("Memory server not ready yet, requeueing", "deployment", memoryDeployName)
+			log.Info("Memory server deployment not found, requeueing", "deployment", memoryDeployName, "age", age.Truncate(time.Second))
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+		if memoryDeploy.Status.ReadyReplicas < 1 {
+			age := time.Since(agentRun.CreationTimestamp.Time)
+			if age > 120*time.Second {
+				return ctrl.Result{}, r.failRun(ctx, agentRun,
+					fmt.Sprintf("memory server deployment %q has no ready replicas after %s", memoryDeployName, age.Truncate(time.Second)))
+			}
+			log.Info("Memory server not ready, requeueing", "deployment", memoryDeployName, "readyReplicas", memoryDeploy.Status.ReadyReplicas, "age", age.Truncate(time.Second))
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 	}
@@ -160,13 +169,24 @@ func (r *AgentRunReconciler) reconcilePendingAgentSandbox(
 	if err := r.mirrorSkillConfigMaps(ctx, log, agentRun); err != nil {
 		log.Error(err, "Failed to mirror skill ConfigMaps")
 	}
+	// RBAC creation is fatal: without it the agent sandbox will run but every
+	// kubectl/API call inside skill sidecars will fail with "forbidden".
+	// See reconcilePending in agentrun_controller.go for common causes.
 	if err := r.ensureSkillRBAC(ctx, log, agentRun, taskSidecars); err != nil {
-		log.Error(err, "Failed to create skill RBAC")
+		return ctrl.Result{}, r.failRun(ctx, agentRun,
+			fmt.Sprintf("failed to create skill RBAC — the agent sandbox would run without Kubernetes permissions. "+
+				"Check controller logs and kube-apiserver for authentication errors. "+
+				"Common causes: expired ServiceAccount tokens, clock skew between nodes, "+
+				"or missing RBAC permissions on the controller ClusterRole (re-run helm upgrade). "+
+				"Underlying error: %v", err))
 	}
 
 	// Create RBAC for lifecycle hook containers if needed.
 	if err := r.ensureLifecycleRBAC(ctx, log, agentRun); err != nil {
-		log.Error(err, "Failed to create lifecycle RBAC")
+		return ctrl.Result{}, r.failRun(ctx, agentRun,
+			fmt.Sprintf("failed to create lifecycle RBAC — hook containers would lack Kubernetes permissions. "+
+				"Check controller logs and kube-apiserver for authentication errors. "+
+				"Underlying error: %v", err))
 	}
 
 	// Create workspace PVC when postRun lifecycle hooks are defined.

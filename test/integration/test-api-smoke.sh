@@ -267,8 +267,8 @@ main() {
   api_post /api/v1/personapacks/install-defaults >/dev/null
   packs_json="$(api_get /api/v1/personapacks)"
   packs_count="$(printf "%s" "$packs_json" | json_len)"
-  if [[ "$packs_count" -lt 1 ]]; then
-    fail "PersonaPacks list is empty after install-defaults"
+  if [[ "$packs_count" -ne 4 ]]; then
+    fail "Expected 4 default PersonaPacks, got ${packs_count}"
     exit 1
   fi
   first_pack="$(printf "%s" "$packs_json" | json_first_name)"

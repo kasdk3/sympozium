@@ -49,19 +49,23 @@ jobs:
             kind load docker-image ${REGISTRY}/${img}:${TAG} --name sympozium-ci
           done
 
-      - name: Install CRDs, built-ins, and policies
-        run: make install
+      - name: Install Helm
+        uses: azure/setup-helm@v4
 
-      - name: Deploy control plane (NATS, RBAC, manager, network, observability)
+      - name: Install Sympozium via Helm
         run: |
           set -euo pipefail
-          kubectl apply -f config/rbac/role.yaml
-          kubectl apply -f config/rbac/service_account.yaml
-          kubectl apply -f config/rbac/role_binding.yaml
-          kubectl apply -f config/nats/nats.yaml
-          kubectl apply -f config/manager/manager.yaml
-          kubectl apply -f config/network/policies.yaml
-          kubectl apply -f config/observability/otel-collector.yaml
+          # Apply CRDs first (Helm doesn't upgrade CRDs).
+          kubectl apply --server-side --force-conflicts -f charts/sympozium/crds/
+          # Install Gateway API CRDs.
+          kubectl apply --server-side --force-conflicts -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
+          # Install via Helm with local image tag.
+          helm install sympozium charts/sympozium/ \
+            --namespace sympozium-system --create-namespace \
+            --set image.tag=${TAG} \
+            --set certManager.enabled=false \
+            --set webhook.enabled=false \
+            --skip-crds
 
       - name: Wait for core deployments
         run: |

@@ -34,11 +34,12 @@ import {
 } from "@/components/ui/dialog";
 import { ArrowLeft, AlertTriangle, Plus, Pencil, Trash2 } from "lucide-react";
 import { formatAge } from "@/lib/utils";
+import { YamlButton, instanceYamlFromResource } from "@/components/yaml-panel";
 
 export function InstanceDetailPage() {
   const { name } = useParams<{ name: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const allowedTabs = new Set(["overview", "channels", "skills", "memory", "web-endpoint", "lifecycle"]);
+  const allowedTabs = new Set(["overview", "channels", "skills", "memory", "web-endpoint", "lifecycle", "yaml"]);
   const paramTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<string>(
     paramTab && allowedTabs.has(paramTab) ? paramTab : "overview",
@@ -97,6 +98,7 @@ export function InstanceDetailPage() {
           <TabsTrigger value="memory">Memory</TabsTrigger>
           <TabsTrigger value="web-endpoint">Web Endpoint</TabsTrigger>
           <TabsTrigger value="lifecycle">Lifecycle</TabsTrigger>
+          <TabsTrigger value="yaml">YAML</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -234,6 +236,23 @@ export function InstanceDetailPage() {
 
         <TabsContent value="lifecycle">
           <LifecycleTab instanceName={inst.metadata.name} lifecycle={inst.spec.agents?.default?.lifecycle} />
+        </TabsContent>
+
+        <TabsContent value="yaml">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Resource YAML</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-3">
+                View the equivalent SympoziumInstance manifest for this resource.
+              </p>
+              <YamlButton
+                yaml={instanceYamlFromResource(inst)}
+                title={`SympoziumInstance — ${inst.metadata.name}`}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

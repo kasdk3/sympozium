@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Clock, Wrench, MessageSquare, Brain, Shield, Pencil, X, Check } from "lucide-react";
 import { formatAge } from "@/lib/utils";
+import { YamlButton, personaPackYamlFromResource } from "@/components/yaml-panel";
 
 interface PersonaEditState {
   systemPrompt: string;
@@ -387,6 +388,19 @@ export function PersonaDetailPage() {
           );
         })}
       </div>
+
+      {/* YAML */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Resource YAML</CardTitle>
+            <YamlButton
+              yaml={personaPackYamlFromResource(pack)}
+              title={`PersonaPack — ${pack.metadata.name}`}
+            />
+          </div>
+        </CardHeader>
+      </Card>
 
       {/* Conditions */}
       {pack.status?.conditions && pack.status.conditions.length > 0 && (

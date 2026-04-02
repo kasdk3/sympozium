@@ -108,7 +108,7 @@ $(CONTROLLER_GEN):
 
 generate: controller-gen ## Generate code (deepcopy, CRD manifests)
 	GOFLAGS=-mod=mod $(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./api/..."
-	GOFLAGS=-mod=mod $(CONTROLLER_GEN) rbac:roleName=sympozium-manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	GOFLAGS=-mod=mod $(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=config/crd/bases
 	@$(MAKE) helm-sync
 
 manifests: controller-gen ## Generate CRD manifests
@@ -305,41 +305,24 @@ kind-reload: docker-build kind-load ## Build all images and load into Kind
 	kubectl rollout restart deployment sympozium-controller-manager -n sympozium-system
 	-kubectl rollout restart daemonset sympozium-node-probe -n sympozium-system 2>/dev/null
 
-set-images: ## Stamp REGISTRY/TAG into K8s manifests
-	find config/ -name '*.yaml' -exec sed -i 's|image: ghcr.io/kasdk3/sympozium/\([^:]*\):[^ ]*|image: $(REGISTRY)/\1:$(TAG)|g' {} +
-	@echo "Images set to $(REGISTRY)/*:$(TAG)"
-
 ##@ Deployment
 
 GATEWAY_API_CRDS_URL ?= https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
 
-install: manifests ## Install CRDs, skills, personas, and policies into the K8s cluster
-	kubectl apply -f config/crd/bases/
+install: manifests ## Install Sympozium via Helm chart (CRDs, control plane, built-ins)
+	kubectl apply --server-side --force-conflicts -f charts/sympozium/crds/
 	@echo "Installing Gateway API CRDs..."
 	kubectl apply --server-side --force-conflicts -f $(GATEWAY_API_CRDS_URL)
-	kubectl create namespace sympozium-system --dry-run=client -o yaml | kubectl apply -f -
-	kubectl apply -f config/skills/
-	kubectl apply -f config/personas/
-	kubectl apply -f config/policies/
+	helm upgrade --install sympozium charts/sympozium/ \
+		--namespace sympozium-system --create-namespace \
+		--set image.tag=$(TAG) \
+		--set certManager.enabled=false \
+		--set webhook.enabled=false \
+		--skip-crds
 
-uninstall: ## Uninstall Sympozium control plane, CRDs, and cleanup finalizers
+uninstall: ## Uninstall Sympozium (Helm release, CRDs, namespace)
 	@set -eu; \
-	echo "==> Deleting Sympozium control plane manifests"; \
-	for m in \
-		config/node-probe/node-probe.yaml \
-		config/observability/otel-collector.yaml \
-		config/cert/certificate.yaml \
-		config/network/policies.yaml \
-		config/webhook/manifests.yaml \
-		config/manager/manager.yaml \
-		config/nats/nats.yaml \
-		config/rbac/role_binding.yaml \
-		config/rbac/service_account.yaml \
-		config/rbac/role.yaml; do \
-		kubectl delete -f "$$m" --ignore-not-found >/dev/null 2>&1 || true; \
-	done; \
-	echo "==> Deleting built-in SkillPacks"; \
-	kubectl delete skillpacks.sympozium.ai --ignore-not-found -n $(SYMPOZIUM_NAMESPACE) -l sympozium.ai/builtin=true >/dev/null 2>&1 || true; \
+	echo "==> Removing finalizers from Sympozium resources"; \
 	for crd in \
 		sympoziumconfigs.sympozium.ai \
 		personapacks.sympozium.ai \
@@ -349,27 +332,25 @@ uninstall: ## Uninstall Sympozium control plane, CRDs, and cleanup finalizers
 		skillpacks.sympozium.ai \
 		agentruns.sympozium.ai; do \
 		if kubectl get crd "$$crd" >/dev/null 2>&1; then \
-			echo "==> Removing finalizers from $$crd instances"; \
 			kubectl get "$$crd" -A -o name 2>/dev/null | while read -r obj; do \
 				[ -n "$$obj" ] || continue; \
 				kubectl patch "$$obj" --type=merge -p '{"metadata":{"finalizers":[]}}' >/dev/null 2>&1 || true; \
 			done; \
-			echo "==> Deleting $$crd instances"; \
 			kubectl delete "$$crd" -A --all --ignore-not-found --timeout=60s >/dev/null 2>&1 || true; \
 		fi; \
 	done; \
+	echo "==> Uninstalling Helm release"; \
+	helm uninstall sympozium --namespace sympozium-system 2>/dev/null || true; \
 	echo "==> Deleting Sympozium CRDs"; \
-	kubectl delete -f config/crd/bases/ --ignore-not-found >/dev/null 2>&1 || true; \
+	kubectl delete -f charts/sympozium/crds/ --ignore-not-found >/dev/null 2>&1 || true; \
 	echo "==> Removing Gateway API CRDs"; \
 	kubectl delete --ignore-not-found -f $(GATEWAY_API_CRDS_URL) >/dev/null 2>&1 || true; \
 	echo "==> Deleting namespace $(SYMPOZIUM_NAMESPACE)"; \
 	kubectl delete namespace $(SYMPOZIUM_NAMESPACE) --ignore-not-found --timeout=120s >/dev/null 2>&1 || true
 
-deploy: manifests ## Deploy controller to the K8s cluster
-	kubectl apply -k config/
+deploy: install ## Deploy Sympozium (alias for install)
 
-undeploy: ## Undeploy controller from the K8s cluster
-	kubectl delete -k config/
+undeploy: uninstall ## Undeploy Sympozium (alias for uninstall)
 
 deploy-samples: ## Deploy sample CRs
 	kubectl apply -f config/samples/

@@ -35,9 +35,15 @@ import {
   Wrench,
   Clock,
   Cpu,
+  FileCode,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCapabilities } from "@/hooks/use-api";
+import {
+  YamlModal,
+  instanceYamlFromWizard,
+  personaPackYamlFromWizard,
+} from "@/components/yaml-panel";
 
 // ── Shared constants ─────────────────────────────────────────────────────────
 
@@ -325,6 +331,7 @@ export function OnboardingWizard({
   });
   const [inferenceMode, setInferenceMode] = useState<"workload" | "node">("workload");
   const [channelActionIdx, setChannelActionIdx] = useState(0);
+  const [showYaml, setShowYaml] = useState(false);
   const { data: capabilities } = useCapabilities();
 
   const isLocalProvider = form.provider === "ollama" || form.provider === "lm-studio" || form.provider === "custom";
@@ -1141,11 +1148,36 @@ export function OnboardingWizard({
                 </div>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {mode === "instance"
-                ? "A new SympoziumInstance will be created with this configuration."
-                : "The controller will stamp out Instances, Schedules, and ConfigMaps for each persona."}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                {mode === "instance"
+                  ? "A new SympoziumInstance will be created with this configuration."
+                  : "The controller will stamp out Instances, Schedules, and ConfigMaps for each persona."}
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setShowYaml(true)}
+              >
+                <FileCode className="h-3.5 w-3.5" />
+                Show YAML
+              </Button>
+            </div>
+            <YamlModal
+              open={showYaml}
+              onClose={() => setShowYaml(false)}
+              yaml={
+                mode === "instance"
+                  ? instanceYamlFromWizard(form)
+                  : personaPackYamlFromWizard(targetName || "<pack-name>", form, personaCount)
+              }
+              title={
+                mode === "instance"
+                  ? `SympoziumInstance — ${form.name || "<instance>"}`
+                  : `PersonaPack — ${targetName || "<pack>"}`
+              }
+            />
           </div>
         )}
 

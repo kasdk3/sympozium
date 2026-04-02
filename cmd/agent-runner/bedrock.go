@@ -96,7 +96,13 @@ func callBedrockWithClient(ctx context.Context, client bedrockClientAPI, model, 
 			attribute.String("gen_ai.system", "bedrock"),
 			attribute.String("gen_ai.request.model", model),
 		)
-		output, err := client.Converse(chatCtx, input)
+		converseCtx := chatCtx
+		if t := effectiveRequestTimeout("bedrock"); t > 0 {
+			var cancel context.CancelFunc
+			converseCtx, cancel = context.WithTimeout(chatCtx, t)
+			defer cancel()
+		}
+		output, err := client.Converse(converseCtx, input)
 		if err != nil {
 			markSpanError(chatSpan, err)
 			chatSpan.End()

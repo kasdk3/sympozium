@@ -83,10 +83,12 @@ func searchHandler(db *sql.DB) http.HandlerFunc {
 			TopK  int    `json:"top_k"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Printf("[search] bad request: %v", err)
 			writeJSON(w, http.StatusBadRequest, apiResponse{Error: "invalid JSON body"})
 			return
 		}
 		if req.Query == "" {
+			log.Printf("[search] rejected: empty query")
 			writeJSON(w, http.StatusBadRequest, apiResponse{Error: "'query' is required"})
 			return
 		}
@@ -94,11 +96,14 @@ func searchHandler(db *sql.DB) http.HandlerFunc {
 			req.TopK = 5
 		}
 
+		log.Printf("[search] query=%q top_k=%d", truncateLog(req.Query, 120), req.TopK)
 		results, err := searchMemories(db, req.Query, req.TopK)
 		if err != nil {
+			log.Printf("[search] error: %v", err)
 			writeJSON(w, http.StatusInternalServerError, apiResponse{Error: err.Error()})
 			return
 		}
+		log.Printf("[search] returned %d result(s)", len(results))
 		writeJSON(w, http.StatusOK, apiResponse{Success: true, Content: results})
 	}
 }
@@ -110,19 +115,24 @@ func storeHandler(db *sql.DB) http.HandlerFunc {
 			Tags    []string `json:"tags"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Printf("[store] bad request: %v", err)
 			writeJSON(w, http.StatusBadRequest, apiResponse{Error: "invalid JSON body"})
 			return
 		}
 		if req.Content == "" {
+			log.Printf("[store] rejected: empty content")
 			writeJSON(w, http.StatusBadRequest, apiResponse{Error: "'content' is required"})
 			return
 		}
 
+		log.Printf("[store] content=%d bytes tags=%v", len(req.Content), req.Tags)
 		id, storedAt, err := storeMemory(db, req.Content, req.Tags)
 		if err != nil {
+			log.Printf("[store] error: %v", err)
 			writeJSON(w, http.StatusInternalServerError, apiResponse{Error: err.Error()})
 			return
 		}
+		log.Printf("[store] saved id=%d at=%s", id, storedAt)
 		writeJSON(w, http.StatusOK, apiResponse{
 			Success: true,
 			Content: map[string]any{"id": id, "stored_at": storedAt},
@@ -138,11 +148,14 @@ func listHandler(db *sql.DB) http.HandlerFunc {
 			limit = l
 		}
 
+		log.Printf("[list] tags=%q limit=%d", tags, limit)
 		results, err := listMemories(db, tags, limit)
 		if err != nil {
+			log.Printf("[list] error: %v", err)
 			writeJSON(w, http.StatusInternalServerError, apiResponse{Error: err.Error()})
 			return
 		}
+		log.Printf("[list] returned %d entry/entries", len(results))
 		writeJSON(w, http.StatusOK, apiResponse{Success: true, Content: results})
 	}
 }
@@ -303,6 +316,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
+}
+
+func truncateLog(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 func envOr(key, fallback string) string {

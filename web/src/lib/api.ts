@@ -424,6 +424,7 @@ export interface PersonaSpec {
   memory?: PersonaMemory;
   channels?: string[];
   webEndpoint?: PersonaWebEndpoint;
+  lifecycle?: LifecycleHooks;
 }
 
 export interface InstalledPersona {
