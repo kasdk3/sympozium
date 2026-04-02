@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	sympoziumv1alpha1 "github.com/sympozium-ai/sympozium/api/v1alpha1"
+	sympoziumv1alpha1 "github.com/kasdk3/sympozium/api/v1alpha1"
 )
 
 func TestPersistFailureMemory_WithMemorySkill(t *testing.T) {

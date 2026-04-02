@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	sympoziumv1alpha1 "github.com/sympozium-ai/sympozium/api/v1alpha1"
+	sympoziumv1alpha1 "github.com/kasdk3/sympozium/api/v1alpha1"
 )
 
 // memoryStoreClient is a shared HTTP client for controller→memory-server calls.

@@ -8,7 +8,7 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 
-	"github.com/sympozium-ai/sympozium/charts"
+	"github.com/kasdk3/sympozium/charts"
 )
 
 // Load returns the embedded Sympozium Helm chart, ready for use with the
