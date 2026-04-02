@@ -1293,13 +1293,18 @@ func runInstall(imageTag string, setValues []string) error {
 		return fmt.Errorf("loading embedded chart: %w", err)
 	}
 
-	// Apply CRDs first (server-side apply to handle schema updates cleanly).
-	fmt.Println("  Applying CRDs...")
-	if err := kubectl("apply", "--server-side", "--force-conflicts", "-f", filepath.Join(tmpDir, "config/crd/bases/")); err != nil {
+	// Build Helm values from CLI flags.
+	vals, err := buildHelmValues(imageTag, setValues)
+	if err != nil {
 		return err
 	}
 
-	// Install Gateway API CRDs (required for GatewayClass, Gateway, HTTPRoute).
+	// ── Pre-flight: CRDs ────────────────────────────────────────────────
+	if err := applyCRDs(ch); err != nil {
+		return err
+	}
+
+	// ── Pre-flight: Gateway API CRDs ────────────────────────────────────
 	fmt.Println("  Installing Gateway API CRDs...")
 	if err := kubectl("apply", "--server-side", "--force-conflicts", "-f", gatewayAPICRDsURL); err != nil {
 		return fmt.Errorf("install Gateway API CRDs: %w", err)
@@ -10433,7 +10438,7 @@ func tuiOnboardApply(ns string, w *wizardState) (string, error) {
 				},
 				SandboxPolicy: &sympoziumv1alpha1.SandboxPolicySpec{
 					Required:     false,
-					DefaultImage: "ghcr.io/kasdk3/sympozium/sandbox:latest",
+					DefaultImage: "ghcr.io/sympozium-ai/sympozium/sandbox:latest",
 					MaxCPU:       "4",
 					MaxMemory:    "8Gi",
 					AgentSandboxPolicy: &sympoziumv1alpha1.AgentSandboxPolicySpec{
