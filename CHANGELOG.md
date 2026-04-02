@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.1](https://github.com/kasdk3/sympozium/compare/v0.4.0...v0.4.1) (2026-04-02)
+
+
+### Features
+
+* reworked memory implementation ([81fdd0c](https://github.com/kasdk3/sympozium/commit/81fdd0c83725dc068bc869f01b5d1af5c421c282))
+
+
+### Bug Fixes
+
+* add metrics.k8s.io RBAC to config/rbac/role.yaml for sympozium install ([0c1a51c](https://github.com/kasdk3/sympozium/commit/0c1a51c8d11354aa5e2df694e8557c120b474857))
+* add missing observability-mcp-team persona pack to Helm chart ([fc0105c](https://github.com/kasdk3/sympozium/commit/fc0105c0d243bb0adc58680e29a4827b7aad88bd))
+* auto-store task/response in memory server after each agent run ([8f475fb](https://github.com/kasdk3/sympozium/commit/8f475fbc2bf600ca7fad12394e7c417dd63e2509))
+* create namespace before Helm config init to fix fresh installs ([e49fa50](https://github.com/kasdk3/sympozium/commit/e49fa50f26604688a1dcbba6a3d06543b0442ea8))
+* fail AgentRun when skill RBAC creation fails instead of silently continuing ([99ddb4d](https://github.com/kasdk3/sympozium/commit/99ddb4d698bedd758c7d5512e6da354dad5db754))
+* guard stale Job-not-found reconcile during postRun transition ([8d2ff41](https://github.com/kasdk3/sympozium/commit/8d2ff41972acb551a9aabc13cc02c1807ca50560))
+* remove explicit host from node-probe targets to restore auto-detection ([f91229a](https://github.com/kasdk3/sympozium/commit/f91229afa5ba5ad0674ba6c9b202932b2a869f3f))
+* resolve remaining TypeScript index signature errors in yaml-panel ([8cea011](https://github.com/kasdk3/sympozium/commit/8cea0119064536a30ba8a1a15d119af73c9380a9))
+* resolve TypeScript index signature errors in yaml-panel ([4a576a1](https://github.com/kasdk3/sympozium/commit/4a576a1b8db3f77c7ee6cb610b08f212b3ab9cd0))
+* stop Helm template from overriding node-probe host auto-detection ([4f0e5f4](https://github.com/kasdk3/sympozium/commit/4f0e5f41217d5ec9bf165dda7796be0df3fd307d))
+* strip directory prefix from CRD names when writing to temp dir ([1906327](https://github.com/kasdk3/sympozium/commit/1906327b3abd32dc887f5a09c98eada9e0fb09b6))
+
 ## [0.4.0](https://github.com/kasdk3/sympozium/compare/v0.3.1...v0.4.0) (2026-03-30)
 
 
