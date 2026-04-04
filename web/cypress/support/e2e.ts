@@ -37,6 +37,8 @@ declare global {
       ): Chainable<string>;
       /** Poll status.phase of an AgentRun until it reaches a terminal phase. */
       waitForRunTerminal(runName: string, timeoutMs?: number): Chainable<string>;
+      /** Poll an API URL until it returns 404 (resource fully deleted). */
+      waitForDeleted(path: string, timeoutMs?: number): Chainable<void>;
       /** Delete an AgentRun by name (cleanup helper). */
       deleteRun(name: string): Chainable<void>;
       /** Delete a PersonaPack by name (cleanup helper). */
@@ -105,13 +107,9 @@ Cypress.Commands.add("createLMStudioInstance", (name: string) => {
     headers: authHeaders(),
     body: {
       name,
-      agents: {
-        default: {
-          model: "qwen/qwen3.5-9b",
-          baseURL: "http://host.docker.internal:1234/v1",
-        },
-      },
-      authRefs: [{ provider: "lm-studio", secret: "" }],
+      provider: "lm-studio",
+      model: "qwen/qwen3.5-9b",
+      baseURL: "http://host.docker.internal:1234/v1",
     },
     failOnStatusCode: false,
   }).then((resp) => {
@@ -141,6 +139,31 @@ Cypress.Commands.add("dispatchRun", (instanceRef: string, task: string, opts) =>
       expect(name).to.be.a("string").and.not.be.empty;
       return cy.wrap(name);
     });
+});
+
+Cypress.Commands.add("waitForDeleted", (path: string, timeoutMs = 30000) => {
+  const started = Date.now();
+  const poll = (): Cypress.Chainable<void> => {
+    return cy
+      .request({
+        url: path,
+        headers: authHeaders(),
+        failOnStatusCode: false,
+      })
+      .then((resp) => {
+        if (resp.status === 404) {
+          return cy.wrap(undefined);
+        }
+        if (Date.now() - started > timeoutMs) {
+          throw new Error(
+            `waitForDeleted(${path}) timed out; last status=${resp.status}`,
+          );
+        }
+        cy.wait(1000, { log: false });
+        return poll();
+      });
+  };
+  return poll();
 });
 
 Cypress.Commands.add("waitForRunTerminal", (runName: string, timeoutMs = 180000) => {

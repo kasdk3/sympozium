@@ -28,8 +28,9 @@ describe("MCP servers — add and list", () => {
       headers: authHeaders(),
       body: {
         name: SERVER,
-        image: "ghcr.io/example/mcp-echo:latest",
-        port: 8080,
+        transportType: "http",
+        toolsPrefix: "cy",
+        url: "http://example.invalid/sse",
       },
       failOnStatusCode: false,
     });

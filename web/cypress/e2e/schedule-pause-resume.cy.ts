@@ -21,7 +21,7 @@ describe("Schedule — pause and resume", () => {
       body: {
         name: SCHEDULE,
         instanceRef: INSTANCE,
-        cron: "*/10 * * * *",
+        schedule: "*/10 * * * *",
         type: "scheduled",
         task: "pause/resume test",
       },
@@ -38,34 +38,26 @@ describe("Schedule — pause and resume", () => {
     cy.visit("/schedules");
     cy.contains(SCHEDULE, { timeout: 20000 }).should("be.visible");
 
-    // Pause.
-    cy.request({
-      method: "PATCH",
-      url: `/api/v1/schedules/${SCHEDULE}?namespace=default`,
-      headers: authHeaders(),
-      body: { suspend: true },
-      failOnStatusCode: false,
-    });
+    // Pause — no apiserver PATCH endpoint exists for schedules, so patch via kubectl.
+    cy.exec(
+      `kubectl patch sympoziumschedule ${SCHEDULE} -n default --type=merge -p '{"spec":{"suspend":true}}'`,
+    );
     cy.visit("/schedules");
     cy.contains(SCHEDULE)
       .parents("tr")
       .within(() => {
-        cy.contains(/paused|suspend|inactive/i, { timeout: 20000 }).should("exist");
+        cy.contains(/suspended/i, { timeout: 20000 }).should("exist");
       });
 
     // Resume.
-    cy.request({
-      method: "PATCH",
-      url: `/api/v1/schedules/${SCHEDULE}?namespace=default`,
-      headers: authHeaders(),
-      body: { suspend: false },
-      failOnStatusCode: false,
-    });
+    cy.exec(
+      `kubectl patch sympoziumschedule ${SCHEDULE} -n default --type=merge -p '{"spec":{"suspend":false}}'`,
+    );
     cy.visit("/schedules");
     cy.contains(SCHEDULE)
       .parents("tr")
       .within(() => {
-        cy.contains(/active|running|enabled/i, { timeout: 20000 }).should("exist");
+        cy.contains(/active/i, { timeout: 20000 }).should("exist");
       });
   });
 });

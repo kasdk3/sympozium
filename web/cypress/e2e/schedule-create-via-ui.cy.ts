@@ -48,7 +48,7 @@ describe("Schedule — create via UI", () => {
           body: {
             name: SCHEDULE,
             instanceRef: INSTANCE,
-            cron: "*/5 * * * *",
+            schedule: "*/5 * * * *",
             type: "scheduled",
             task: "scheduled cypress test",
           },

@@ -22,7 +22,7 @@ describe("Schedule — delete", () => {
       body: {
         name: SCHEDULE,
         instanceRef: INSTANCE,
-        cron: "* * * * *",
+        schedule: "* * * * *",
         type: "scheduled",
         task: "test schedule task",
       },
@@ -40,18 +40,10 @@ describe("Schedule — delete", () => {
     cy.contains(SCHEDULE, { timeout: 20000 }).should("be.visible");
 
     cy.deleteSchedule(SCHEDULE);
+    cy.waitForDeleted(`/api/v1/schedules/${SCHEDULE}?namespace=default`);
 
     cy.visit("/schedules");
     cy.contains(SCHEDULE, { timeout: 20000 }).should("not.exist");
-
-    // Direct GET should 404.
-    cy.request({
-      url: `/api/v1/schedules/${SCHEDULE}?namespace=default`,
-      headers: authHeaders(),
-      failOnStatusCode: false,
-    }).then((resp) => {
-      expect(resp.status).to.eq(404);
-    });
   });
 });
 

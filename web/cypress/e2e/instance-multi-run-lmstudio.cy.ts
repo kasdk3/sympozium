@@ -100,15 +100,8 @@ describe("Ad-hoc Instance — Multiple Runs and Delete", () => {
       expect(resp.status).to.be.oneOf([200, 202, 204]);
     });
 
-    // API: subsequent GET should 404.
-    cy.request({
-      method: "GET",
-      url: `/api/v1/instances/${INSTANCE}?namespace=default`,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      failOnStatusCode: false,
-    }).then((resp) => {
-      expect(resp.status).to.eq(404);
-    });
+    // API: subsequent GET should eventually 404 (finalizers may delay removal).
+    cy.waitForDeleted(`/api/v1/instances/${INSTANCE}?namespace=default`);
 
     // UI: instance no longer shown in the list.
     cy.visit("/instances");

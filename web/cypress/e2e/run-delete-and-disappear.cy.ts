@@ -30,16 +30,10 @@ describe("Run — delete", () => {
 
     cy.deleteRun(RUN_NAME);
 
+    cy.waitForDeleted(`/api/v1/runs/${RUN_NAME}?namespace=default`);
+
     cy.visit("/runs");
     cy.contains(RUN_NAME, { timeout: 20000 }).should("not.exist");
-
-    cy.request({
-      url: `/api/v1/runs/${RUN_NAME}?namespace=default`,
-      headers: authHeaders(),
-      failOnStatusCode: false,
-    }).then((resp) => {
-      expect(resp.status).to.eq(404);
-    });
   });
 });
 

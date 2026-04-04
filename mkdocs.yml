@@ -97,6 +97,7 @@ nav:
     - Writing Skills: guides/writing-skills.md
     - Writing Tools: guides/writing-tools.md
     - Writing Integration Tests: guides/writing-integration-tests.md
+    - Writing UX Tests (Cypress): guides/writing-ux-tests.md
   - Skills Reference:
     - LLMFit: skills/llmfit.md
     - Web Endpoint: skills/web-endpoint.md

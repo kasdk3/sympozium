@@ -4,14 +4,15 @@
 
 describe("Login flow", () => {
   it("redirects to /login when no token is set", () => {
-    cy.clearLocalStorage();
-    // Use the native Cypress visit (without the token-injecting override
-    // from support/e2e.ts by clearing the API_TOKEN env for this call).
-    const prev = Cypress.env("API_TOKEN");
-    Cypress.env("API_TOKEN", "");
-    cy.visit("/", { failOnStatusCode: false });
-    cy.url({ timeout: 20000 }).should("match", /\/login|\/$/);
-    Cypress.env("API_TOKEN", prev);
+    // Our onBeforeLoad runs AFTER the support-override's token injection,
+    // so the final state of localStorage on page boot has NO token.
+    cy.visit("/", {
+      failOnStatusCode: false,
+      onBeforeLoad(win) {
+        win.localStorage.removeItem("sympozium_token");
+      },
+    });
+    cy.url({ timeout: 20000 }).should("include", "/login");
   });
 
   it("persists authenticated session across reload with a valid token", () => {
