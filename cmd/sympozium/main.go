@@ -2170,6 +2170,7 @@ const (
 	wizStepChannelToken                      // text: channel bot token
 	wizStepPolicy                            // y/n: apply default policy
 	wizStepAgentSandbox                      // y/n: enable agent sandbox (CRD) isolation
+	wizStepRunTimeout                        // menu: run timeout per agent run
 	wizStepHeartbeat                         // menu 1-5: heartbeat interval
 	wizStepConfirm                           // y/n: confirm summary
 	wizStepApplying                          // auto — create resources
@@ -2224,6 +2225,7 @@ type wizardState struct {
 	githubRepo          string // GitHub repo (owner/repo) for github-gitops skill
 	teamTask            string // Team-level instructions/objective
 	agentSandboxEnabled bool   // Enable Agent Sandbox (CRD) kernel-level isolation
+	runTimeout          string // Max duration per agent run (e.g. "30m", "1h")
 
 	// AWS Bedrock credentials (collected via dedicated wizard steps).
 	awsRegion          string
@@ -8932,6 +8934,24 @@ func (m tuiModel) advanceWizard(val string) (tea.Model, tea.Cmd) {
 	case wizStepAgentSandbox:
 		v := strings.ToLower(val)
 		w.agentSandboxEnabled = (v == "y" || v == "yes")
+		w.step = wizStepRunTimeout
+		m.input.Placeholder = "Run timeout [1-4] (default: 1 — provider default)"
+		return m, nil
+
+	case wizStepRunTimeout:
+		if val == "" {
+			val = "1"
+		}
+		switch val {
+		case "2":
+			w.runTimeout = "30m"
+		case "3":
+			w.runTimeout = "1h"
+		case "4":
+			w.runTimeout = "2h"
+		default:
+			w.runTimeout = "" // provider default
+		}
 		w.step = wizStepHeartbeat
 		m.input.Placeholder = "Heartbeat interval [1-5] (default: 2 — every hour)"
 		return m, nil
@@ -9588,6 +9608,16 @@ func (m tuiModel) renderWizardPanel(h int) string {
 		lines = append(lines, menuStyle.Render("  Requires: agent-sandbox CRDs installed + gVisor/Kata runtime on nodes."))
 		lines = append(lines, labelStyle.Render("  Enable Agent Sandbox isolation?"))
 
+	case wizStepRunTimeout:
+		lines = append(lines, stepStyle.Render("  📋 Step 7.6/9 — Run Timeout"))
+		lines = append(lines, menuStyle.Render("  Maximum time each agent run is allowed before timing out."))
+		lines = append(lines, menuStyle.Render("  Local models (Ollama, LM Studio) default to 30m; cloud providers to 10m."))
+		lines = append(lines, "")
+		lines = append(lines, menuNumStyle.Render("  1)")+menuStyle.Render(" Provider default (10m cloud / 30m local)"))
+		lines = append(lines, menuNumStyle.Render("  2)")+menuStyle.Render(" 30 minutes"))
+		lines = append(lines, menuNumStyle.Render("  3)")+menuStyle.Render(" 1 hour"))
+		lines = append(lines, menuNumStyle.Render("  4)")+menuStyle.Render(" 2 hours"))
+
 	case wizStepHeartbeat:
 		lines = append(lines, stepStyle.Render("  📋 Step 8/9 — Heartbeat Schedule"))
 		lines = append(lines, menuStyle.Render("  A heartbeat lets your agent wake up periodically to review memory"))
@@ -9637,6 +9667,11 @@ func (m tuiModel) renderWizardPanel(h int) string {
 			hbDisplay = "every hour"
 		}
 		lines = append(lines, hintStyle.Render("  Heartbeat: ")+valueStyle.Render(hbDisplay))
+		rtDisplay := "provider default"
+		if w.runTimeout != "" {
+			rtDisplay = w.runTimeout
+		}
+		lines = append(lines, hintStyle.Render("  Timeout:   ")+valueStyle.Render(rtDisplay))
 		lines = append(lines, tuiSepStyle.Render("  "+strings.Repeat("━", 50)))
 		lines = append(lines, "")
 		lines = append(lines, labelStyle.Render("  Proceed?"))
@@ -10509,6 +10544,9 @@ func tuiOnboardApply(ns string, w *wizardState) (string, error) {
 			Enabled:      true,
 			RuntimeClass: "gvisor",
 		}
+	}
+	if w.runTimeout != "" {
+		inst.Spec.Agents.Default.RunTimeout = w.runTimeout
 	}
 
 	// Default skills: k8s-ops + llmfit + memory.

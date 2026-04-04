@@ -111,6 +111,8 @@ export interface WizardResult {
   agentSandboxEnabled?: boolean;
   /** Runtime class for Agent Sandbox (e.g., "gvisor", "kata") */
   agentSandboxRuntimeClass?: string;
+  /** Maximum duration per agent run (e.g., "30m", "1h"). Defaults to 10m cloud / 30m local. */
+  runTimeout?: string;
 }
 
 interface OnboardingWizardProps {
@@ -324,6 +326,7 @@ export function OnboardingWizard({
     nodeSelector: defaults?.nodeSelector,
     agentSandboxEnabled: defaults?.agentSandboxEnabled ?? false,
     agentSandboxRuntimeClass: defaults?.agentSandboxRuntimeClass || "gvisor",
+    runTimeout: defaults?.runTimeout || "",
     awsRegion: defaults?.awsRegion || "",
     awsAccessKeyId: defaults?.awsAccessKeyId || "",
     awsSecretAccessKey: defaults?.awsSecretAccessKey || "",
@@ -973,6 +976,31 @@ export function OnboardingWizard({
                 </div>
               )}
             </div>
+
+            {/* Run Timeout */}
+            <div className="rounded-md border border-border/50 p-3 space-y-2">
+              <div>
+                <p className="text-xs font-medium">Run Timeout</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Max duration per agent run. Local models (Ollama, LM Studio) default to 30m, cloud to 10m.
+                </p>
+              </div>
+              <Select
+                value={form.runTimeout || ""}
+                onValueChange={(v) => setForm({ ...form, runTimeout: v })}
+              >
+                <SelectTrigger className="h-7 text-xs">
+                  <SelectValue placeholder="Provider default" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Provider default</SelectItem>
+                  <SelectItem value="10m">10 minutes</SelectItem>
+                  <SelectItem value="30m">30 minutes</SelectItem>
+                  <SelectItem value="1h">1 hour</SelectItem>
+                  <SelectItem value="2h">2 hours</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           </ScrollArea>
         )}
@@ -1145,6 +1173,12 @@ export function OnboardingWizard({
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Agent Sandbox</span>
                   <span className="text-xs">{form.agentSandboxRuntimeClass || "gvisor"}</span>
+                </div>
+              )}
+              {form.runTimeout && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Run Timeout</span>
+                  <span className="text-xs">{form.runTimeout}</span>
                 </div>
               )}
             </div>

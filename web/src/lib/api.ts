@@ -694,6 +694,7 @@ export const api = {
       heartbeatInterval?: string;
       nodeSelector?: Record<string, string>;
       agentSandbox?: { enabled: boolean; runtimeClass?: string };
+      runTimeout?: string;
     }) =>
       apiFetch<SympoziumInstance>("/api/v1/instances", {
         method: "POST",
