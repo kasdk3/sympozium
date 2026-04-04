@@ -1346,7 +1346,11 @@ func runInstall(imageTag string, setValues []string) error {
 		install := action.NewInstall(cfg)
 		install.ReleaseName = helmReleaseName
 		install.Namespace = helmNamespace
-		install.CreateNamespace = true
+		// Only ask Helm to create the namespace if it doesn't already exist.
+		// Helm v3.20 wraps the namespace-create error in a multierror, which
+		// defeats its own IsAlreadyExists check and makes the install fail
+		// when the namespace was created by a previous partial install.
+		install.CreateNamespace = kubectlQuiet("get", "namespace", helmNamespace) != nil
 		install.SkipCRDs = true // We applied CRDs above.
 		install.Wait = false    // Don't block — cert-manager certificate may need time.
 		install.Timeout = 5 * time.Minute
