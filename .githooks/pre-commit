@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Pre-commit hook: ensure all Go files are gofmt-formatted before committing.
+# Pre-commit hook:
+#   1. ensure all Go files are gofmt-formatted
+#   2. if api/ types changed, ensure generated CRDs/deepcopy are in sync
 
 set -euo pipefail
 
@@ -11,4 +13,21 @@ if [ -n "$unformatted" ]; then
   echo ""
   echo "Run 'make fmt' or 'gofmt -s -w .' to fix, then re-add and commit."
   exit 1
+fi
+
+# Only run codegen check if API types are part of this commit.
+if git diff --cached --name-only | grep -qE '^api/.*\.go$'; then
+  echo "api/ types changed — verifying generated code is in sync..."
+  if ! make generate >/dev/null 2>&1; then
+    echo "ERROR: 'make generate' failed. Fix the errors, then re-commit."
+    exit 1
+  fi
+  drift=$(git diff --name-only -- config/crd/bases charts/sympozium/crds api/ 2>/dev/null || true)
+  if [ -n "$drift" ]; then
+    echo "ERROR: Generated code is out of sync with api/ types. Drifted files:"
+    echo "$drift" | sed 's/^/  /'
+    echo ""
+    echo "Run 'make generate', then 'git add' the updated files and re-commit."
+    exit 1
+  fi
 fi
