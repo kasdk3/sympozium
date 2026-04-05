@@ -25,6 +25,8 @@ Sympozium supports any GenAI provider with an OpenAI-compatible API:
 | Anthropic | (default) | `ANTHROPIC_API_KEY` |
 | Azure OpenAI | your endpoint | `AZURE_OPENAI_API_KEY` |
 | Ollama | `http://ollama:11434/v1` | none |
+| LM Studio | `http://localhost:1234/v1` | none |
+| Unsloth | `http://localhost:8080/v1` | none |
 | Any OpenAI-compatible | custom URL | custom |
 
-See the [Ollama guide](../guides/ollama.md) for detailed local LLM setup.
+See the [Ollama guide](../guides/ollama.md), [LM Studio guide](../guides/lm-studio.md), or [Unsloth guide](../guides/unsloth.md) for detailed local LLM setup.

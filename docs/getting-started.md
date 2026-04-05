@@ -85,7 +85,7 @@ Press **Enter** on a pack to start the activation wizard:
 | Step | What it does |
 |------|-------------|
 | **1 — Pick personas** | Review the personas in the pack, deselect any you don't need |
-| **2 — Provider** | Choose your LLM provider (OpenAI, Anthropic, Azure OpenAI, Ollama, or custom endpoint) |
+| **2 — Provider** | Choose your LLM provider (OpenAI, Anthropic, Azure OpenAI, Ollama, LM Studio, Unsloth, or custom endpoint) |
 | **3 — API key** | Paste your API key (stored as a Kubernetes Secret) |
 | **4 — Model** | Pick a model (e.g. `gpt-4o`, `claude-sonnet-4-20250514`, `llama3`) |
 | **5 — Channels** | Optionally bind messaging channels (Telegram, Slack, Discord, WhatsApp) |
@@ -120,7 +120,7 @@ The wizard walks you through six steps:
 | Step | What it does |
 |------|--------------|
 | **1 — Cluster check** | Verifies the cluster is reachable and Sympozium is installed. Offers to run `sympozium install` if CRDs are missing. |
-| **2 — Provider** | Choose your LLM provider (OpenAI, Anthropic, Azure OpenAI, Ollama, or any OpenAI-compatible endpoint). Enter a base URL if needed, then paste your API key. |
+| **2 — Provider** | Choose your LLM provider (OpenAI, Anthropic, Azure OpenAI, Ollama, LM Studio, Unsloth, or any OpenAI-compatible endpoint). Enter a base URL if needed, then paste your API key. |
 | **3 — Channel** | Optionally connect a messaging channel (Telegram, Slack, Discord, WhatsApp) or skip for now. |
 | **4 — Policy** | Choose a policy preset: **Permissive** (everything allowed), **Default** (commands require approval), or **Restrictive** (very locked-down). |
 | **5 — Heartbeat** | Pick how often the agent should wake up on its own: every 30 min, hourly (recommended), every 6 hours, daily at 9 AM, or disabled. |

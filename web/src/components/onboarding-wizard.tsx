@@ -53,6 +53,7 @@ export const PROVIDERS = [
   { value: "azure-openai", label: "Azure OpenAI", defaultModel: "gpt-4o", defaultBaseURL: "" },
   { value: "ollama", label: "Ollama", defaultModel: "llama3", defaultBaseURL: "http://ollama.default.svc:11434/v1" },
   { value: "lm-studio", label: "LM Studio", defaultModel: "", defaultBaseURL: "http://localhost:1234/v1" },
+  { value: "unsloth", label: "Unsloth", defaultModel: "", defaultBaseURL: "http://localhost:8080/v1" },
   { value: "bedrock", label: "AWS Bedrock", defaultModel: "anthropic.claude-sonnet-4-20250514-v1:0", defaultBaseURL: "" },
   { value: "custom", label: "Custom", defaultModel: "", defaultBaseURL: "" },
 ];
@@ -337,7 +338,17 @@ export function OnboardingWizard({
   const [showYaml, setShowYaml] = useState(false);
   const { data: capabilities } = useCapabilities();
 
-  const isLocalProvider = form.provider === "ollama" || form.provider === "lm-studio" || form.provider === "custom";
+  const isLocalProvider = form.provider === "ollama" || form.provider === "lm-studio" || form.provider === "unsloth" || form.provider === "custom";
+  // Unsloth is served via llama.cpp's llama-server or vLLM, both of which
+  // are already probed by node-probe under their own target names. When the
+  // user picks "unsloth" in the UI, match nodes that expose either of those.
+  const nodeProviderMatches = (probeName: string) => {
+    if (form.provider === "custom") return true;
+    if (form.provider === "unsloth") {
+      return probeName === "unsloth" || probeName === "llama-cpp" || probeName === "vllm";
+    }
+    return probeName === form.provider;
+  };
   const { data: providerNodes, isLoading: nodesLoading } = useProviderNodes(
     isLocalProvider && inferenceMode === "node"
   );
@@ -351,7 +362,7 @@ export function OnboardingWizard({
       case "provider":
         return !!form.provider;
       case "apikey":
-        if (form.provider === "ollama" || form.provider === "lm-studio") return true;
+        if (form.provider === "ollama" || form.provider === "lm-studio" || form.provider === "unsloth") return true;
         if (form.provider === "bedrock") return !!form.secretName || !!form.awsRegion;
         return !!form.secretName || !!form.apiKey;
       case "model":
@@ -469,7 +480,7 @@ export function OnboardingWizard({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-md overflow-hidden">
+      <DialogContent className="sm:max-w-2xl overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {titleIcon}
@@ -583,6 +594,8 @@ export function OnboardingWizard({
                       ? "http://ollama.default.svc:11434/v1"
                       : form.provider === "lm-studio"
                       ? "http://localhost:1234/v1"
+                      : form.provider === "unsloth"
+                      ? "http://localhost:8080/v1"
                       : "https://your-endpoint.openai.azure.com/v1"
                   }
                 />
@@ -599,7 +612,7 @@ export function OnboardingWizard({
                     Discovering nodes...
                   </div>
                 ) : !providerNodes || providerNodes.filter((n) =>
-                    form.provider === "custom" || n.providers.some((p) => p.name === form.provider)
+                    n.providers.some((p) => nodeProviderMatches(p.name))
                   ).length === 0 ? (
                   <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
                     {providerNodes && providerNodes.length > 0
@@ -611,17 +624,17 @@ export function OnboardingWizard({
                     <div className="p-1 space-y-0.5">
                       {providerNodes
                         .filter((node) =>
-                          form.provider === "custom" || node.providers.some((p) => p.name === form.provider)
+                          node.providers.some((p) => nodeProviderMatches(p.name))
                         )
                         .map((node) => {
                         const isSelected = form.nodeSelector?.["kubernetes.io/hostname"] === node.nodeName;
                         const nodeProviders = node.providers
-                          .filter((p) => !form.provider || form.provider === "custom" || p.name === form.provider)
+                          .filter((p) => !form.provider || nodeProviderMatches(p.name))
                           .map((p) => p.name);
                         const nodeModels = node.providers
-                          .filter((p) => !form.provider || form.provider === "custom" || p.name === form.provider)
+                          .filter((p) => !form.provider || nodeProviderMatches(p.name))
                           .flatMap((p) => p.models);
-                        const providerInfo = node.providers.find((p) => p.name === form.provider) || node.providers[0];
+                        const providerInfo = node.providers.find((p) => nodeProviderMatches(p.name)) || node.providers[0];
 
                         return (
                           <button
@@ -674,7 +687,8 @@ export function OnboardingWizard({
           <div className="space-y-4">
             {form.provider !== "bedrock" &&
               form.provider !== "ollama" &&
-              form.provider !== "lm-studio" && (
+              form.provider !== "lm-studio" &&
+              form.provider !== "unsloth" && (
               <div className="space-y-2">
                 <Label>API Key</Label>
                 <Input
