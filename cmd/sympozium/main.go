@@ -10470,7 +10470,7 @@ func tuiOnboardApply(ns string, w *wizardState) (string, error) {
 				},
 				SandboxPolicy: &sympoziumv1alpha1.SandboxPolicySpec{
 					Required:     false,
-					DefaultImage: "ghcr.io/sympozium-ai/sympozium/sandbox:latest",
+					DefaultImage: "ghcr.io/kasdk3/sympozium/sandbox:latest",
 					MaxCPU:       "4",
 					MaxMemory:    "8Gi",
 					AgentSandboxPolicy: &sympoziumv1alpha1.AgentSandboxPolicySpec{
