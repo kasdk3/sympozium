@@ -58,9 +58,9 @@ cleanup() {
   api_request DELETE "/api/v1/instances/${SKILL_INSTANCE}" >/dev/null 2>&1 || true
   # kubectl fallback: secrets, agentruns, configmaps, instances
   kubectl delete secret "${PLAIN_INSTANCE}-openai-key" "${SKILL_INSTANCE}-openai-key" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
-  [[ -n "$PLAIN_RUN" ]] && kubectl delete agentrun "$PLAIN_RUN" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
-  [[ -n "$SKILL_RUN" ]] && kubectl delete agentrun "$SKILL_RUN" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
-  kubectl delete sympoziuminstance "$PLAIN_INSTANCE" "$SKILL_INSTANCE" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
+  [[ -n "$PLAIN_RUN" ]] && kubectl delete agentrun "$PLAIN_RUN" -n "$NAMESPACE" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  [[ -n "$SKILL_RUN" ]] && kubectl delete agentrun "$SKILL_RUN" -n "$NAMESPACE" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl delete sympoziuminstance "$PLAIN_INSTANCE" "$SKILL_INSTANCE" -n "$NAMESPACE" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete configmap -n "$NAMESPACE" -l "sympozium.ai/instance=${PLAIN_INSTANCE}" --ignore-not-found >/dev/null 2>&1 || true
   kubectl delete configmap -n "$NAMESPACE" -l "sympozium.ai/instance=${SKILL_INSTANCE}" --ignore-not-found >/dev/null 2>&1 || true
   stop_port_forward

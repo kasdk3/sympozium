@@ -70,6 +70,7 @@ export function InstancesPage() {
         agentSandbox: result.agentSandboxEnabled
           ? { enabled: true, runtimeClass: result.agentSandboxRuntimeClass || "gvisor" }
           : undefined,
+        runTimeout: result.runTimeout || undefined,
       },
       {
         onSuccess: () => {

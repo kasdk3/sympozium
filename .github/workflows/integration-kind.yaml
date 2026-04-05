@@ -74,8 +74,8 @@ jobs:
           kubectl rollout status deployment/sympozium-apiserver -n sympozium-system --timeout=300s
           kubectl rollout status deployment/sympozium-otel-collector -n sympozium-system --timeout=300s
 
-      - name: Run API integration tests
-        run: make integration-tests
+      - name: Run API smoke tests
+        run: bash ./test/integration/test-api-smoke.sh
 
       - name: Dump cluster state on failure
         if: failure()

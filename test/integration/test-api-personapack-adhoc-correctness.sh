@@ -72,10 +72,10 @@ cleanup() {
   api_request DELETE "/api/v1/personapacks/${PACK_NAME}" >/dev/null 2>&1 || true
 
   # kubectl fallback: agentruns, schedules, instances, pack, secrets, configmaps
-  kubectl delete agentrun -n "$NAMESPACE" -l "sympozium.ai/instance=${PACK_INSTANCE_NAME}" --ignore-not-found >/dev/null 2>&1 || true
-  kubectl delete agentrun -n "$NAMESPACE" -l "sympozium.ai/instance=${ADHOC_INSTANCE_NAME}" --ignore-not-found >/dev/null 2>&1 || true
-  kubectl delete sympoziumschedule "${PACK_INSTANCE_NAME}-schedule" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
-  kubectl delete sympoziuminstance "$PACK_INSTANCE_NAME" "$ADHOC_INSTANCE_NAME" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
+  kubectl delete agentrun -n "$NAMESPACE" -l "sympozium.ai/instance=${PACK_INSTANCE_NAME}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl delete agentrun -n "$NAMESPACE" -l "sympozium.ai/instance=${ADHOC_INSTANCE_NAME}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl delete sympoziumschedule "${PACK_INSTANCE_NAME}-schedule" -n "$NAMESPACE" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl delete sympoziuminstance "$PACK_INSTANCE_NAME" "$ADHOC_INSTANCE_NAME" -n "$NAMESPACE" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete personapack "$PACK_NAME" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
   kubectl delete secret "$PACK_EXPECTED_SECRET" "$ADHOC_EXPECTED_SECRET" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
   kubectl delete configmap -n "$NAMESPACE" -l "sympozium.ai/instance=${PACK_INSTANCE_NAME}" --ignore-not-found >/dev/null 2>&1 || true

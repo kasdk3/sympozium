@@ -71,8 +71,8 @@ cleanup() {
   api_request DELETE "/api/v1/instances/${INSTANCE_NAME}" >/dev/null 2>&1 || true
   api_request DELETE "/api/v1/personapacks/${PACK_NAME}" >/dev/null 2>&1 || true
   # kubectl fallback: agentruns, instance, pack, secrets, configmaps
-  kubectl delete agentrun -n "$NAMESPACE" -l "sympozium.ai/instance=${INSTANCE_NAME}" --ignore-not-found >/dev/null 2>&1 || true
-  kubectl delete sympoziuminstance "$INSTANCE_NAME" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
+  kubectl delete agentrun -n "$NAMESPACE" -l "sympozium.ai/instance=${INSTANCE_NAME}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl delete sympoziuminstance "$INSTANCE_NAME" -n "$NAMESPACE" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete personapack "$PACK_NAME" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
   kubectl delete secret "$OPENAI_SECRET" "$ANTHROPIC_SECRET" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
   kubectl delete configmap -n "$NAMESPACE" -l "sympozium.ai/instance=${INSTANCE_NAME}" --ignore-not-found >/dev/null 2>&1 || true

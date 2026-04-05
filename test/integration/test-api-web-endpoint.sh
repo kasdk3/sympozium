@@ -54,7 +54,7 @@ cleanup() {
   info "Cleaning up web-endpoint test resources..."
   api_request DELETE "/api/v1/instances/${INSTANCE_NAME}" >/dev/null 2>&1 || true
   # kubectl fallback: instance, auto-created secret, configmaps
-  kubectl delete sympoziuminstance "$INSTANCE_NAME" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
+  kubectl delete sympoziuminstance "$INSTANCE_NAME" -n "$NAMESPACE" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete secret "${INSTANCE_NAME}-openai-key" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
   kubectl delete configmap -n "$NAMESPACE" -l "sympozium.ai/instance=${INSTANCE_NAME}" --ignore-not-found >/dev/null 2>&1 || true
   stop_port_forward

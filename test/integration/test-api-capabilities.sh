@@ -57,7 +57,7 @@ cleanup() {
   info "Cleaning up capability API test resources..."
   api_request DELETE "/api/v1/instances/${CLAUDE_INSTANCE_NAME}" >/dev/null 2>&1 || true
   # kubectl fallback: instance, auto-created anthropic secret, configmaps
-  kubectl delete sympoziuminstance "$CLAUDE_INSTANCE_NAME" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
+  kubectl delete sympoziuminstance "$CLAUDE_INSTANCE_NAME" -n "$NAMESPACE" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete secret "${CLAUDE_INSTANCE_NAME}-anthropic-key" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
   kubectl delete configmap -n "$NAMESPACE" -l "sympozium.ai/instance=${CLAUDE_INSTANCE_NAME}" --ignore-not-found >/dev/null 2>&1 || true
 

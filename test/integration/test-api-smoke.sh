@@ -59,9 +59,9 @@ cleanup() {
   api_delete "/api/v1/schedules/${SCHEDULE_NAME}" >/dev/null 2>&1 || true
   api_delete "/api/v1/instances/${INSTANCE_NAME}" >/dev/null 2>&1 || true
   # kubectl fallback: agentruns, schedule, instance, any auto-created secret, configmaps
-  kubectl delete agentrun -n "$NAMESPACE" -l "sympozium.ai/instance=${INSTANCE_NAME}" --ignore-not-found >/dev/null 2>&1 || true
-  kubectl delete sympoziumschedule "$SCHEDULE_NAME" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
-  kubectl delete sympoziuminstance "$INSTANCE_NAME" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
+  kubectl delete agentrun -n "$NAMESPACE" -l "sympozium.ai/instance=${INSTANCE_NAME}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl delete sympoziumschedule "$SCHEDULE_NAME" -n "$NAMESPACE" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl delete sympoziuminstance "$INSTANCE_NAME" -n "$NAMESPACE" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete secret "${INSTANCE_NAME}-openai-key" -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
   kubectl delete configmap -n "$NAMESPACE" -l "sympozium.ai/instance=${INSTANCE_NAME}" --ignore-not-found >/dev/null 2>&1 || true
 

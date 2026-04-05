@@ -656,3 +656,454 @@ func TestCallAnthropic_ToolErrorIsError(t *testing.T) {
 		}
 	}
 }
+
+// TestCallOpenAI_EmptyTerminalTurnFallsBack reproduces the exact qwen3.5-9b
+// on LM Studio failure pattern at the wire level:
+//
+//	Turn 1: assistant emits reasoning content + tool_calls, finish_reason="tool_calls"
+//	Turn 2: assistant emits EMPTY content, finish_reason="stop"
+//
+// Before the accumulated-reasoning fallback was added, the agent returned an
+// empty response and the UX showed "No result available" despite 292 output
+// tokens having been generated. This test is the regression guard.
+func TestCallOpenAI_EmptyTerminalTurnFallsBack(t *testing.T) {
+	callCount := 0
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+
+		if callCount == 1 {
+			// Reasoning preamble + tool call.
+			json.NewEncoder(w).Encode(map[string]any{
+				"id": "chatcmpl-1", "object": "chat.completion", "model": "qwen/qwen3.5-9b",
+				"choices": []map[string]any{{
+					"index": 0,
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": "I'll scan the cluster now for security issues.",
+						"tool_calls": []map[string]any{{
+							"id":   "call_abc",
+							"type": "function",
+							"function": map[string]any{
+								"name":      "read_file",
+								"arguments": `{"path":"/tmp/scan"}`,
+							},
+						}},
+					},
+					"finish_reason": "tool_calls",
+				}},
+				"usage": map[string]int{"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+			})
+			return
+		}
+
+		// Terminal turn: empty content (qwen3.5 quirk after tool result).
+		json.NewEncoder(w).Encode(map[string]any{
+			"id": "chatcmpl-2", "object": "chat.completion", "model": "qwen/qwen3.5-9b",
+			"choices": []map[string]any{{
+				"index": 0,
+				"message": map[string]any{
+					"role":    "assistant",
+					"content": "",
+				},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]int{"prompt_tokens": 200, "completion_tokens": 242, "total_tokens": 442},
+		})
+	})
+
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	tools := []ToolDef{
+		{Name: "read_file", Description: "Read a file",
+			Parameters: map[string]any{
+				"properties": map[string]any{"path": map[string]any{"type": "string"}},
+				"required":   []string{"path"},
+			}},
+	}
+
+	text, inTok, outTok, toolCalls, err := callOpenAI(t.Context(),
+		"lm-studio", "key", srv.URL, "qwen/qwen3.5-9b",
+		"You are a security scanner.", "Scan the cluster", tools)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if text == "" {
+		t.Fatal("response is EMPTY — accumulated-reasoning fallback did not kick in (REGRESSION)")
+	}
+	if !strings.Contains(text, "I'll scan the cluster now") {
+		t.Errorf("response should contain turn-1 reasoning preamble, got: %q", text)
+	}
+	if callCount != 2 {
+		t.Errorf("callCount = %d, want 2 (tool-call turn + terminal turn)", callCount)
+	}
+	if toolCalls != 1 {
+		t.Errorf("toolCalls = %d, want 1", toolCalls)
+	}
+	if inTok != 300 || outTok != 292 {
+		t.Errorf("tokens = (%d,%d), want (300,292) accumulated across both turns", inTok, outTok)
+	}
+}
+
+// TestCallOpenAI_ReasoningContentFallback guards against the qwen3.x/deepseek-r1
+// reasoning-model pattern where LM Studio/Ollama put the model's final answer in
+// a non-standard `reasoning_content` field while leaving the standard `content`
+// field empty. The provider must surface reasoning_content so users see the
+// actual answer rather than a preamble (or blank response).
+func TestCallOpenAI_ReasoningContentFallback(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Simulate qwen3.5 on LM Studio: empty content, answer in reasoning_content.
+		w.Write([]byte(`{
+			"id": "chatcmpl-r1",
+			"object": "chat.completion",
+			"model": "qwen/qwen3.5-9b",
+			"choices": [{
+				"index": 0,
+				"message": {
+					"role": "assistant",
+					"content": "",
+					"reasoning_content": "Based on the scan results, I found 2 privileged containers and 1 default service account violation. Severity: HIGH."
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {"prompt_tokens": 500, "completion_tokens": 120, "total_tokens": 620}
+		}`))
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	text, _, _, _, err := callOpenAI(t.Context(),
+		"lm-studio", "", srv.URL, "qwen/qwen3.5-9b",
+		"You are a security scanner.", "scan", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if text == "" {
+		t.Fatal("response is EMPTY — reasoning_content fallback failed (REGRESSION)")
+	}
+	if !strings.Contains(text, "2 privileged containers") {
+		t.Errorf("response should contain reasoning_content, got: %q", text)
+	}
+}
+
+// TestSanitizeReasoningArtifacts exercises the stripping of qwen-native
+// <tool_call>, <think>, and <tool_use> blocks that leak into
+// reasoning_content when LM Studio fails to parse them into structured
+// tool_calls.
+func TestSanitizeReasoningArtifacts(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			"strips complete tool_call block",
+			"Good, found 7 namespaces.\n\n<tool_call>\n<function=execute_command>\n<parameter=command>\nkubectl get pods\n</parameter>\n</function>\n</tool_call>",
+			"Good, found 7 namespaces.",
+		},
+		{
+			"strips think block",
+			"<think>Let me reason about this carefully.</think>The answer is 42.",
+			"The answer is 42.",
+		},
+		{
+			"strips multiple blocks",
+			"Result: X.\n<think>pondering</think>\n<tool_call>doing stuff</tool_call>\nDone.",
+			"Result: X.\n\nDone.",
+		},
+		{
+			"truncates unclosed tool_call",
+			"Partial finding.\n<tool_call>\n<function=broken\nno closing tag",
+			"Partial finding.",
+		},
+		{
+			"preserves clean text",
+			"All 3 pods are Running with 0 restarts.",
+			"All 3 pods are Running with 0 restarts.",
+		},
+		{
+			"case-insensitive tag match",
+			"Summary.<TOOL_CALL>junk</TOOL_CALL>Done.",
+			"Summary.Done.",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := sanitizeReasoningArtifacts(c.in)
+			// Allow the blank-line normaliser to produce 1-2 trailing/middle
+			// newlines; collapse both expected and actual to compare.
+			if got != c.want {
+				t.Errorf("\ngot:  %q\nwant: %q", got, c.want)
+			}
+		})
+	}
+}
+
+// TestCallOpenAI_ReasoningContentStripsArtifacts: proves that <think> blocks
+// in reasoning_content are sanitized and the surrounding text becomes the
+// user-facing response. (Tool-call recovery is covered by a separate test.)
+func TestCallOpenAI_ReasoningContentStripsArtifacts(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"id": "chatcmpl-art",
+			"object": "chat.completion",
+			"model": "qwen/qwen3.5-9b",
+			"choices": [{
+				"index": 0,
+				"message": {
+					"role": "assistant",
+					"content": "",
+					"reasoning_content": "<think>let me count carefully...</think>Good, I found 7 namespaces in total."
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {"prompt_tokens": 500, "completion_tokens": 120, "total_tokens": 620}
+		}`))
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	text, _, _, _, err := callOpenAI(t.Context(),
+		"lm-studio", "", srv.URL, "qwen/qwen3.5-9b", "sys", "scan", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if text == "" {
+		t.Fatal("response is EMPTY")
+	}
+	if strings.Contains(text, "<think>") || strings.Contains(text, "count carefully") {
+		t.Errorf("response still contains <think> artifacts: %q", text)
+	}
+	if !strings.Contains(text, "7 namespaces") {
+		t.Errorf("response should retain the real content, got: %q", text)
+	}
+}
+
+// TestParseQwenToolCalls verifies recovery of qwen-native tool calls from
+// reasoning_content, including numeric-parameter coercion.
+func TestParseQwenToolCalls(t *testing.T) {
+	in := `Good, I found 7 namespaces.
+
+<tool_call>
+<function=execute_command>
+<parameter=command>
+kubectl get pods -A
+</parameter>
+<parameter=timeout>
+30
+</parameter>
+</function>
+</tool_call>
+
+Let me also check nodes.
+
+<tool_call>
+<function=execute_command>
+<parameter=command>kubectl get nodes</parameter>
+</function>
+</tool_call>`
+
+	calls := parseQwenToolCalls(in)
+	if len(calls) != 2 {
+		t.Fatalf("got %d calls, want 2", len(calls))
+	}
+	if calls[0].Name != "execute_command" {
+		t.Errorf("call[0].Name = %q, want execute_command", calls[0].Name)
+	}
+	// Args should be JSON with timeout coerced to int.
+	var args0 map[string]any
+	if err := json.Unmarshal([]byte(calls[0].Input), &args0); err != nil {
+		t.Fatalf("cannot unmarshal call[0] args: %v", err)
+	}
+	cmd, _ := args0["command"].(string)
+	if !strings.Contains(cmd, "kubectl get pods -A") {
+		t.Errorf("call[0].command = %q", cmd)
+	}
+	// timeout should be a number (JSON unmarshal makes it float64), not a string.
+	if _, ok := args0["timeout"].(float64); !ok {
+		t.Errorf("call[0].timeout should be a number, got %T: %v", args0["timeout"], args0["timeout"])
+	}
+	// Second call has only command.
+	var args1 map[string]any
+	json.Unmarshal([]byte(calls[1].Input), &args1)
+	if args1["command"] != "kubectl get nodes" {
+		t.Errorf("call[1].command = %v", args1["command"])
+	}
+}
+
+// TestCoerceScalar exercises the parameter type heuristic.
+func TestCoerceScalar(t *testing.T) {
+	cases := map[string]any{
+		"42":          int64(42),
+		"-7":          int64(-7),
+		"3.14":        float64(3.14),
+		"true":        true,
+		"false":       false,
+		"hello":       "hello",
+		"":            "",
+		"kubectl get": "kubectl get",
+	}
+	for in, want := range cases {
+		got := coerceScalar(in)
+		if got != want {
+			t.Errorf("coerceScalar(%q) = %v (%T), want %v (%T)", in, got, got, want, want)
+		}
+	}
+}
+
+// TestCallOpenAI_QwenToolCallRecovery: end-to-end, when reasoning_content
+// carries qwen-native <tool_call> blocks, those become structured ToolCalls
+// that the loop will dispatch. Regression guard for the persona-pack-early-
+// termination bug.
+func TestCallOpenAI_QwenToolCallRecovery(t *testing.T) {
+	callCount := 0
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+
+		if callCount == 1 {
+			// Reasoning content carries a tool_call block; standard fields empty.
+			w.Write([]byte(`{
+				"id": "c1", "object": "chat.completion", "model": "qwen/qwen3.5-9b",
+				"choices": [{
+					"index": 0,
+					"message": {
+						"role": "assistant",
+						"content": "",
+						"reasoning_content": "I'll check the pods.\n\n<tool_call>\n<function=read_file>\n<parameter=path>/tmp/pods</parameter>\n</function>\n</tool_call>"
+					},
+					"finish_reason": "stop"
+				}],
+				"usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+			}`))
+			return
+		}
+		// Second call: model produces a proper final answer.
+		w.Write([]byte(`{
+			"id": "c2", "object": "chat.completion", "model": "qwen/qwen3.5-9b",
+			"choices": [{
+				"index": 0,
+				"message": {"role": "assistant", "content": "Found 3 pods: a, b, c."},
+				"finish_reason": "stop"
+			}],
+			"usage": {"prompt_tokens": 200, "completion_tokens": 20, "total_tokens": 220}
+		}`))
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	tools := []ToolDef{
+		{Name: "read_file", Description: "Read a file",
+			Parameters: map[string]any{
+				"properties": map[string]any{"path": map[string]any{"type": "string"}},
+				"required":   []string{"path"},
+			}},
+	}
+	text, _, _, toolCalls, err := callOpenAI(t.Context(),
+		"lm-studio", "", srv.URL, "qwen/qwen3.5-9b", "sys", "list pods", tools)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if callCount != 2 {
+		t.Errorf("expected 2 HTTP calls (recovered tool + final), got %d", callCount)
+	}
+	if toolCalls != 1 {
+		t.Errorf("toolCalls = %d, want 1 (the recovered qwen tool_call)", toolCalls)
+	}
+	if text != "Found 3 pods: a, b, c." {
+		t.Errorf("text = %q, want proper final answer", text)
+	}
+}
+
+// TestCallOpenAI_ContentPreferredOverReasoning: when both `content` and
+// `reasoning_content` are present, `content` wins (standard behavior).
+func TestCallOpenAI_ContentPreferredOverReasoning(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"id": "chatcmpl-r2",
+			"object": "chat.completion",
+			"model": "qwen/qwen3.5-9b",
+			"choices": [{
+				"index": 0,
+				"message": {
+					"role": "assistant",
+					"content": "Found 3 pods.",
+					"reasoning_content": "Let me think... counting pods... there are 3."
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70}
+		}`))
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	text, _, _, _, err := callOpenAI(t.Context(),
+		"lm-studio", "", srv.URL, "qwen/qwen3.5-9b", "sys", "count pods", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if text != "Found 3 pods." {
+		t.Errorf("text = %q, want 'Found 3 pods.' (content field, not reasoning)", text)
+	}
+}
+
+// TestCallAnthropic_EmptyTerminalTurnFallsBack is the equivalent regression
+// guard for the Anthropic provider: if the terminal turn has no text blocks,
+// the accumulated reasoning from earlier turns surfaces in the response.
+func TestCallAnthropic_EmptyTerminalTurnFallsBack(t *testing.T) {
+	callCount := 0
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+
+		if callCount == 1 {
+			// Reasoning text + tool_use block.
+			json.NewEncoder(w).Encode(map[string]any{
+				"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-test",
+				"content": []map[string]any{
+					{"type": "text", "text": "Let me check that file for you."},
+					{"type": "tool_use", "id": "tu_1", "name": "read_file",
+						"input": map[string]string{"path": "/tmp/scan"}},
+				},
+				"stop_reason": "tool_use",
+				"usage":       map[string]int{"input_tokens": 100, "output_tokens": 50},
+			})
+			return
+		}
+
+		// Terminal turn: no text blocks at all (e.g. refusal, empty response).
+		json.NewEncoder(w).Encode(map[string]any{
+			"id": "msg_2", "type": "message", "role": "assistant", "model": "claude-test",
+			"content":     []map[string]any{},
+			"stop_reason": "end_turn",
+			"usage":       map[string]int{"input_tokens": 200, "output_tokens": 10},
+		})
+	})
+
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	tools := []ToolDef{
+		{Name: "read_file", Description: "Read a file",
+			Parameters: map[string]any{
+				"properties": map[string]any{"path": map[string]any{"type": "string"}},
+				"required":   []string{"path"},
+			}},
+	}
+
+	text, _, _, _, err := callAnthropic(t.Context(), "key", srv.URL, "claude-test", "sys", "Check file", tools)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if text == "" {
+		t.Fatal("response is EMPTY — accumulated-reasoning fallback did not kick in (REGRESSION)")
+	}
+	if !strings.Contains(text, "Let me check that file") {
+		t.Errorf("response should contain turn-1 reasoning text, got: %q", text)
+	}
+}

@@ -39,6 +39,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	sympoziumv1alpha1 "github.com/kasdk3/sympozium/api/v1alpha1"
+	"github.com/kasdk3/sympozium/internal/eventbus"
 	"github.com/kasdk3/sympozium/internal/orchestrator"
 	"gopkg.in/yaml.v3"
 )
@@ -69,6 +70,10 @@ const DefaultRunHistoryLimit = 50
 // It watches AgentRun CRDs and reconciles them into Kubernetes Jobs/Pods.
 type AgentRunReconciler struct {
 	client.Client
+	// APIReader bypasses the controller cache for reads — needed when we
+	// must see status mutations committed by a concurrent reconcile that
+	// the watch-based cache may not yet have observed.
+	APIReader       client.Reader
 	Scheme          *runtime.Scheme
 	Log             logr.Logger
 	PodBuilder      *orchestrator.PodBuilder
@@ -79,6 +84,11 @@ type AgentRunReconciler struct {
 	// DynamicClient is used for Agent Sandbox CRD operations.
 	// Nil when agent-sandbox support is disabled or CRDs are not installed.
 	DynamicClient dynamic.Interface
+
+	// EventBus publishes agent lifecycle events (e.g. agent.run.failed) so
+	// that components like the web proxy can react without polling the CRD.
+	// Optional — nil when NATS is not configured.
+	EventBus eventbus.EventBus
 }
 
 const imageRegistry = "ghcr.io/kasdk3/sympozium"
@@ -303,6 +313,13 @@ func (r *AgentRunReconciler) reconcilePending(ctx context.Context, log logr.Logg
 			}
 		}
 		mcpServers = instance.Spec.MCPServers
+
+		// Propagate RunTimeout from instance config to AgentRun spec if not already set.
+		if agentRun.Spec.Timeout == nil && instance.Spec.Agents.Default.RunTimeout != "" {
+			if d, err := time.ParseDuration(instance.Spec.Agents.Default.RunTimeout); err == nil && d > 0 {
+				agentRun.Spec.Timeout = &metav1.Duration{Duration: d}
+			}
+		}
 	}
 
 	// Resolve MCPServer CRs: for any mcpServer entry without a URL,
@@ -479,15 +496,26 @@ func (r *AgentRunReconciler) reconcileRunning(ctx context.Context, log logr.Logg
 	}
 	if err := r.Get(ctx, jobName, job); err != nil {
 		if errors.IsNotFound(err) {
-			// Guard against the race where the Job was already deleted (to kill
-			// sidecars) and a concurrent reconcile of startPostRun has already
-			// transitioned the phase to PostRunning or Succeeded. Do a fresh Get
-			// from the API server (not the cache) to check the actual phase before
-			// deciding to fail the run.
+			// Guard against the race where the Job was already deleted (to
+			// kill sidecars) and a concurrent reconcile has already
+			// transitioned the phase to a terminal state. Read with the
+			// non-cached APIReader (the watch cache may not have the
+			// status update yet) — if the run is already terminal, don't
+			// override it with "Job not found".
 			fresh := &sympoziumv1alpha1.AgentRun{}
-			if getErr := r.Get(ctx, client.ObjectKeyFromObject(agentRun), fresh); getErr == nil {
-				if fresh.Status.Phase == sympoziumv1alpha1.AgentRunPhasePostRunning ||
-					fresh.Status.Phase == sympoziumv1alpha1.AgentRunPhaseSucceeded {
+			reader := client.Reader(r.APIReader)
+			if reader == nil {
+				reader = r.Client
+			}
+			if getErr := reader.Get(ctx, client.ObjectKeyFromObject(agentRun), fresh); getErr == nil {
+				switch fresh.Status.Phase {
+				case sympoziumv1alpha1.AgentRunPhaseSucceeded,
+					sympoziumv1alpha1.AgentRunPhaseFailed:
+					// Already terminal — don't override.
+					return ctrl.Result{}, nil
+				case sympoziumv1alpha1.AgentRunPhasePostRunning:
+					// PostRun container is still executing — let the
+					// PostRunning reconcile path handle it.
 					return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 				}
 			}
@@ -1434,6 +1462,13 @@ func (r *AgentRunReconciler) buildContainers(
 		{Name: "MODEL_NAME", Value: agentRun.Spec.Model.Model},
 		{Name: "MODEL_BASE_URL", Value: agentRun.Spec.Model.BaseURL},
 		{Name: "THINKING_MODE", Value: agentRun.Spec.Model.Thinking},
+	}
+
+	// Inject RUN_TIMEOUT from the AgentRun spec or instance config.
+	if agentRun.Spec.Timeout != nil {
+		agentEnv = append(agentEnv, corev1.EnvVar{
+			Name: "RUN_TIMEOUT", Value: agentRun.Spec.Timeout.Duration.String(),
+		})
 	}
 
 	ipcEnv := []corev1.EnvVar{
@@ -2514,6 +2549,22 @@ func (r *AgentRunReconciler) failRun(ctx context.Context, agentRun *sympoziumv1a
 		"instance", agentRun.Spec.InstanceRef,
 		"error", reason,
 	)
+
+	// Publish failure event so web proxy / channel router can unblock.
+	if r.EventBus != nil {
+		metadata := map[string]string{
+			"agentRunID":   agentRun.Name,
+			"instanceName": agentRun.Spec.InstanceRef,
+		}
+		data := map[string]string{"error": reason}
+		event, err := eventbus.NewEvent(eventbus.TopicAgentRunFailed, metadata, data)
+		if err == nil {
+			if pubErr := r.EventBus.Publish(ctx, eventbus.TopicAgentRunFailed, event); pubErr != nil {
+				slog.ErrorContext(ctx, "failed to publish agent.run.failed event",
+					"agent_run", agentRun.Name, "error", pubErr)
+			}
+		}
+	}
 
 	return nil
 }

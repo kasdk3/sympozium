@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -12,12 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthropics/anthropic-sdk-go"
-	anthropicoption "github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/azure"
-	openaioption "github.com/openai/openai-go/v3/option"
-	"github.com/openai/openai-go/v3/shared"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
@@ -39,6 +32,11 @@ var llmRequestTimeout time.Duration // 0 means no per-request timeout
 // Defaults: 2 for local providers, 5 for cloud providers.
 var llmMaxRetries = -1 // -1 means "use provider-appropriate default"
 
+// runTimeout is the overall context deadline for the entire agent run.
+// Defaults: 10 minutes for cloud providers, 30 minutes for local providers.
+// Override with RUN_TIMEOUT env var (Go duration string, e.g. "30m", "1h").
+var runTimeout time.Duration // 0 means "use provider-appropriate default"
+
 func init() {
 	if val := os.Getenv("MAX_TOOL_ITERATIONS"); val != "" {
 		if n, err := strconv.Atoi(val); err == nil && n > 0 {
@@ -53,6 +51,11 @@ func init() {
 	if val := os.Getenv("LLM_MAX_RETRIES"); val != "" {
 		if n, err := strconv.Atoi(val); err == nil && n >= 0 {
 			llmMaxRetries = n
+		}
+	}
+	if val := os.Getenv("RUN_TIMEOUT"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil && d > 0 {
+			runTimeout = d
 		}
 	}
 }
@@ -87,6 +90,17 @@ func effectiveRequestTimeout(provider string) time.Duration {
 		return 5 * time.Minute
 	}
 	return 0 // no per-request timeout for cloud providers
+}
+
+// effectiveRunTimeout returns the overall run context timeout.
+func effectiveRunTimeout(provider string) time.Duration {
+	if runTimeout > 0 {
+		return runTimeout // explicit override via RUN_TIMEOUT env
+	}
+	if isLocalProvider(provider) {
+		return 30 * time.Minute
+	}
+	return 10 * time.Minute
 }
 
 type agentResult struct {
@@ -263,7 +277,9 @@ func main() {
 
 	_ = os.MkdirAll("/ipc/output", 0o755)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	rt := effectiveRunTimeout(provider)
+	log.Printf("run_timeout=%s", rt)
+	ctx, cancel := context.WithTimeout(context.Background(), rt)
 	defer cancel()
 
 	obs := initObservability(ctx)
@@ -350,8 +366,10 @@ func main() {
 	}
 
 	// Auto-store task/response in memory server for future context.
+	// Must be synchronous — the process exits shortly after this point,
+	// so a goroutine would be killed before the HTTP POST completes.
 	if res.Status == "success" && res.Response != "" {
-		go autoStoreMemory(task, res.Response)
+		autoStoreMemory(task, res.Response)
 	}
 
 	// Extract and emit memory update before stripping markers from the response.
@@ -405,261 +423,41 @@ func main() {
 	log.Println("agent-runner finished successfully")
 }
 
-// callAnthropic uses the official Anthropic Go SDK with optional tool calling.
-// When tools is non-empty, the function enters a loop: call the LLM, execute
-// any tool_use blocks, feed results back, and repeat until the model produces
-// a final text response or the iteration limit is reached.
+// callAnthropic dispatches an agent run to the Anthropic provider.
+// Retained as a thin wrapper around newAnthropicProvider + runAgentLoop for
+// backward-compatible test coverage.
 func callAnthropic(ctx context.Context, apiKey, baseURL, model, systemPrompt, task string, tools []ToolDef) (string, int, int, int, error) {
-	opts := []anthropicoption.RequestOption{
-		anthropicoption.WithMaxRetries(effectiveMaxRetries("anthropic")),
-	}
-	if t := effectiveRequestTimeout("anthropic"); t > 0 {
-		opts = append(opts, anthropicoption.WithRequestTimeout(t))
-	}
-	if apiKey != "" {
-		opts = append(opts, anthropicoption.WithAPIKey(apiKey))
-	}
-	if baseURL != "" {
-		opts = append(opts, anthropicoption.WithBaseURL(baseURL))
-	}
-
-	client := anthropic.NewClient(opts...)
-
-	// Build Anthropic tool definitions.
-	var anthropicTools []anthropic.ToolUnionParam
-	for _, t := range tools {
-		schema := anthropic.ToolInputSchemaParam{
-			Properties: t.Parameters["properties"],
-		}
-		if req, ok := t.Parameters["required"].([]string); ok {
-			schema.Required = req
-		}
-		tool := anthropic.ToolUnionParamOfTool(schema, t.Name)
-		tool.OfTool.Description = anthropic.String(t.Description)
-		anthropicTools = append(anthropicTools, tool)
-	}
-
-	messages := []anthropic.MessageParam{
-		anthropic.NewUserMessage(anthropic.NewTextBlock(task)),
-	}
-
-	totalInputTokens := 0
-	totalOutputTokens := 0
-	totalToolCalls := 0
-
-	for i := 0; i < maxToolIterations; i++ {
-		params := anthropic.MessageNewParams{
-			Model:     anthropic.Model(model),
-			MaxTokens: int64(8192),
-			System: []anthropic.TextBlockParam{
-				{Text: systemPrompt},
-			},
-			Messages: messages,
-		}
-		if len(anthropicTools) > 0 {
-			params.Tools = anthropicTools
-		}
-
-		chatCtx, chatSpan := obs.startChatSpan(ctx,
-			attribute.String("gen_ai.system", "anthropic"),
-			attribute.String("gen_ai.request.model", model),
-		)
-		message, err := client.Messages.New(chatCtx, params)
-		if err != nil {
-			markSpanError(chatSpan, err)
-			chatSpan.End()
-			var apiErr *anthropic.Error
-			if errors.As(err, &apiErr) {
-				return "", totalInputTokens, totalOutputTokens, totalToolCalls,
-					fmt.Errorf("Anthropic API error (HTTP %d): %s", apiErr.StatusCode, truncate(apiErr.Error(), 500))
-			}
-			return "", totalInputTokens, totalOutputTokens, totalToolCalls,
-				fmt.Errorf("Anthropic API error: %w", err)
-		}
-
-		totalInputTokens += int(message.Usage.InputTokens)
-		totalOutputTokens += int(message.Usage.OutputTokens)
-		chatSpan.SetAttributes(
-			attribute.Int("gen_ai.usage.input_tokens", int(message.Usage.InputTokens)),
-			attribute.Int("gen_ai.usage.output_tokens", int(message.Usage.OutputTokens)),
-			attribute.String("gen_ai.response.finish_reasons", string(message.StopReason)),
-		)
-		chatSpan.SetStatus(codes.Ok, "")
-		chatSpan.End()
-
-		// Separate text blocks and tool-use blocks.
-		var textContent strings.Builder
-		var toolUseBlocks []anthropic.ToolUseBlock
-		for _, block := range message.Content {
-			switch v := block.AsAny().(type) {
-			case anthropic.TextBlock:
-				textContent.WriteString(v.Text)
-			case anthropic.ToolUseBlock:
-				toolUseBlocks = append(toolUseBlocks, v)
-			}
-		}
-
-		// If no tool calls, return the text.
-		if message.StopReason != anthropic.StopReasonToolUse || len(toolUseBlocks) == 0 {
-			return textContent.String(), totalInputTokens, totalOutputTokens, totalToolCalls, nil
-		}
-
-		// Build the assistant message with all content blocks (text + tool_use).
-		var assistantBlocks []anthropic.ContentBlockParamUnion
-		for _, block := range message.Content {
-			switch v := block.AsAny().(type) {
-			case anthropic.TextBlock:
-				assistantBlocks = append(assistantBlocks, anthropic.NewTextBlock(v.Text))
-			case anthropic.ToolUseBlock:
-				assistantBlocks = append(assistantBlocks,
-					anthropic.NewToolUseBlock(v.ID, json.RawMessage(v.Input), v.Name))
-			}
-		}
-		messages = append(messages, anthropic.NewAssistantMessage(assistantBlocks...))
-
-		// Execute each tool call and build tool_result blocks.
-		var resultBlocks []anthropic.ContentBlockParamUnion
-		for _, tu := range toolUseBlocks {
-			totalToolCalls++
-			log.Printf("tool_use [%d]: %s id=%s", totalToolCalls, tu.Name, tu.ID)
-
-			result := executeToolCallWithTelemetry(ctx, tu.Name, string(tu.Input), tu.ID)
-			isErr := strings.HasPrefix(result, "Error:")
-			resultBlocks = append(resultBlocks, anthropic.NewToolResultBlock(tu.ID, result, isErr))
-		}
-		messages = append(messages, anthropic.NewUserMessage(resultBlocks...))
-	}
-
-	return "", totalInputTokens, totalOutputTokens, totalToolCalls,
-		fmt.Errorf("exceeded maximum tool-call iterations (%d)", maxToolIterations)
+	p := newAnthropicProvider(apiKey, baseURL, model, systemPrompt, task, tools)
+	return runAgentLoop(ctx, p)
 }
 
-// callOpenAI uses the official OpenAI Go SDK with optional tool calling.
-// When tools is non-empty, the function enters a loop: call the LLM, execute
-// any tool_calls, feed results back, and repeat until the model produces a
-// final text response or the iteration limit is reached.
+// callOpenAI dispatches an agent run to the OpenAI-compatible provider path
+// (OpenAI, LM Studio, Ollama, vLLM, Azure OpenAI, …).
 func callOpenAI(ctx context.Context, provider, apiKey, baseURL, model, systemPrompt, task string, tools []ToolDef) (string, int, int, int, error) {
-	retries := effectiveMaxRetries(provider)
-	reqTimeout := effectiveRequestTimeout(provider)
-
-	opts := []openaioption.RequestOption{
-		openaioption.WithMaxRetries(retries),
+	p, err := newOpenAIProvider(provider, apiKey, baseURL, model, systemPrompt, task, tools)
+	if err != nil {
+		return "", 0, 0, 0, err
 	}
-	if reqTimeout > 0 {
-		opts = append(opts, openaioption.WithRequestTimeout(reqTimeout))
+	return runAgentLoop(ctx, p)
+}
+
+// callBedrock dispatches an agent run to the AWS Bedrock provider.
+func callBedrock(ctx context.Context, model, systemPrompt, task string, tools []ToolDef) (string, int, int, int, error) {
+	p, err := newBedrockProvider(ctx, model, systemPrompt, task, tools)
+	if err != nil {
+		return "", 0, 0, 0, err
 	}
+	return runAgentLoop(ctx, p)
+}
 
-	switch provider {
-	case "azure-openai":
-		if baseURL == "" {
-			return "", 0, 0, 0, fmt.Errorf("Azure OpenAI requires MODEL_BASE_URL to be set")
-		}
-		apiVersion := getEnv("AZURE_OPENAI_API_VERSION", "2024-06-01")
-		opts = append(opts,
-			azure.WithEndpoint(baseURL, apiVersion),
-			azure.WithAPIKey(apiKey),
-		)
-	default:
-		if apiKey != "" {
-			opts = append(opts, openaioption.WithAPIKey(apiKey))
-		}
-		if baseURL != "" {
-			opts = append(opts, openaioption.WithBaseURL(baseURL))
-		} else if provider == "ollama" {
-			opts = append(opts, openaioption.WithBaseURL("http://ollama.default.svc:11434/v1"))
-		} else if provider == "lm-studio" {
-			opts = append(opts, openaioption.WithBaseURL("http://localhost:1234/v1"))
-		}
+// callBedrockWithClient accepts a pre-built client; used by tests to inject
+// a mock Bedrock client without hitting AWS.
+func callBedrockWithClient(ctx context.Context, client bedrockClientAPI, model, systemPrompt, task string, tools []ToolDef) (string, int, int, int, error) {
+	p, err := newBedrockProviderWithClient(client, model, systemPrompt, task, tools)
+	if err != nil {
+		return "", 0, 0, 0, err
 	}
-
-	client := openai.NewClient(opts...)
-
-	// Build OpenAI tool definitions.
-	var oaiTools []openai.ChatCompletionToolUnionParam
-	for _, t := range tools {
-		oaiTools = append(oaiTools, openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
-			Name:        t.Name,
-			Description: openai.String(t.Description),
-			Parameters:  shared.FunctionParameters(t.Parameters),
-		}))
-	}
-
-	messages := []openai.ChatCompletionMessageParamUnion{
-		openai.SystemMessage(systemPrompt),
-		openai.UserMessage(task),
-	}
-
-	totalInputTokens := 0
-	totalOutputTokens := 0
-	totalToolCalls := 0
-
-	for i := 0; i < maxToolIterations; i++ {
-		params := openai.ChatCompletionNewParams{
-			Model:    openai.ChatModel(model),
-			Messages: messages,
-		}
-		if len(oaiTools) > 0 {
-			params.Tools = oaiTools
-		}
-
-		chatCtx, chatSpan := obs.startChatSpan(ctx,
-			attribute.String("gen_ai.system", provider),
-			attribute.String("gen_ai.request.model", model),
-		)
-		completion, err := client.Chat.Completions.New(chatCtx, params)
-		if err != nil {
-			markSpanError(chatSpan, err)
-			chatSpan.End()
-			var apiErr *openai.Error
-			if errors.As(err, &apiErr) {
-				return "", totalInputTokens, totalOutputTokens, totalToolCalls,
-					fmt.Errorf("OpenAI API error (HTTP %d): %s", apiErr.StatusCode, truncate(apiErr.Error(), 500))
-			}
-			return "", totalInputTokens, totalOutputTokens, totalToolCalls,
-				fmt.Errorf("OpenAI API error: %w", err)
-		}
-
-		totalInputTokens += int(completion.Usage.PromptTokens)
-		totalOutputTokens += int(completion.Usage.CompletionTokens)
-		chatSpan.SetAttributes(
-			attribute.Int("gen_ai.usage.input_tokens", int(completion.Usage.PromptTokens)),
-			attribute.Int("gen_ai.usage.output_tokens", int(completion.Usage.CompletionTokens)),
-		)
-
-		if len(completion.Choices) == 0 {
-			markSpanError(chatSpan, fmt.Errorf("no choices in completion response"))
-			chatSpan.End()
-			return "", totalInputTokens, totalOutputTokens, totalToolCalls,
-				fmt.Errorf("no choices in completion response")
-		}
-		choice := completion.Choices[0]
-		chatSpan.SetAttributes(attribute.String("gen_ai.response.finish_reasons", choice.FinishReason))
-		chatSpan.SetStatus(codes.Ok, "")
-		chatSpan.End()
-
-		// If model made tool calls, execute them and loop.
-		if choice.FinishReason == "tool_calls" && len(choice.Message.ToolCalls) > 0 {
-			// Add the assistant message (with tool calls) to history.
-			messages = append(messages, choice.Message.ToParam())
-
-			// Execute each tool call and add results.
-			for _, tc := range choice.Message.ToolCalls {
-				fc := tc.AsFunction()
-				totalToolCalls++
-				log.Printf("tool_call [%d]: %s id=%s", totalToolCalls, fc.Function.Name, fc.ID)
-
-				result := executeToolCallWithTelemetry(ctx, fc.Function.Name, fc.Function.Arguments, fc.ID)
-				messages = append(messages, openai.ToolMessage(result, fc.ID))
-			}
-			continue
-		}
-
-		// No tool calls — return the text response.
-		return choice.Message.Content, totalInputTokens, totalOutputTokens, totalToolCalls, nil
-	}
-
-	return "", totalInputTokens, totalOutputTokens, totalToolCalls,
-		fmt.Errorf("exceeded maximum tool-call iterations (%d)", maxToolIterations)
+	return runAgentLoop(ctx, p)
 }
 
 func writeJSON(path string, v any) {

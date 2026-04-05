@@ -108,6 +108,31 @@ make build      # compile all binaries
 go build ./...  # quick compile check
 ```
 
+### Pre-commit hook
+
+The repo ships a pre-commit hook at `.githooks/pre-commit` that:
+
+1. verifies all Go files are `gofmt`-formatted, and
+2. if any `api/` type files are staged, runs `make generate` and fails the commit if CRDs/deepcopy are out of sync.
+
+Enable it once per clone:
+
+```bash
+make setup-hooks
+```
+
+This catches codegen drift locally — without it, the drift only surfaces in the `Codegen & Helm sync` CI job after push.
+
+### Required status checks
+
+The following CI jobs should be configured as **required status checks** on the `main` branch in GitHub branch protection, so PRs can't merge while red:
+
+- `Vet`
+- `Test`
+- `Build`
+- `Codegen & Helm sync`
+- `Format`
+
 ---
 
 ## Multi-Architecture Builds
